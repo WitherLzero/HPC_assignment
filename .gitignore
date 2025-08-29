@@ -1,0 +1,75 @@
+# Compiled object files and libraries
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+*.exe
+*.out
+
+# Debug / profiling artifacts
+*.dSYM/
+*.gcda
+*.gcno
+*.gcov
+*.gprof
+*.prof
+
+# Intermediate/dependency files
+*.d
+*.pch
+
+# CMake build system
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+_deps/
+
+# Make / Autotools cache
+Makefile.in
+autom4te.cache/
+configure
+config.log
+config.status
+libtool
+aclocal.m4
+
+# Doxygen generated documentation
+html/
+latex/
+man/
+rtf/
+xml/
+
+# Logs
+*.log
+
+# Editor/IDE settings
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage / reports
+coverage/
+
+# Common web/node (in case present)
+node_modules/
+
+# Python cache (if any scripts)
+__pycache__/
+*.pyc
+
+build/
+
+**/gen_*.txt
