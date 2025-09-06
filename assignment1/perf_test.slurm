@@ -19,11 +19,6 @@ make
 echo "Starting performance test..."
 echo "Matrix Size | Execution Time (seconds) | Memory Usage (MB) | Status"
 echo "--------------------------------------------------------------------"
-echo "Example output format:"
-echo "1000x1000 | 0.1 | 4 | SUCCESS"
-echo "10000x10000 | 2 | 400 | SUCCESS"
-echo "100000x100000 | 45 | 40000 | SUCCESS"
-echo "1000000x1000000 | 1200 | 4000000 | OUT_OF_MEMORY"
 echo ""
 
 # Initialize matrix size starting from 10^4
@@ -63,7 +58,7 @@ while [ "$time_limit_reached" = false ]; do
             time_limit_reached=true
         else
             # Increase matrix size by 10x
-            matrix_size=$((matrix_size + 10000))
+            matrix_size=$((matrix_size * 10))
         fi
     else
         if [ $exit_code -eq 137 ]; then

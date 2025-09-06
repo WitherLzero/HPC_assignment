@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <limits.h>
+#include <omp.h>
 
 #include "../include/conv2d.h"
 
@@ -81,19 +83,40 @@ void print_matrix(float **matrix, int rows, int cols) {
     }
 }
 
+// Fast random number generator using xorshift algorithm
+static inline unsigned int xorshift32(unsigned int *state) {
+    unsigned int x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    return x;
+}
+
+
 // Generate random matrix with values between min_val and max_val
 float **generate_random_matrix(int rows, int cols, float min_val,
                                float max_val) {
     float **matrix = allocate_matrix(rows, cols);
+    
+    // Pre-calculate range for efficiency
+    const float range = max_val - min_val;
+    const float inv_max = 1.0f / (float)UINT_MAX;
+    const float scale = range * inv_max;
 
-    srand(time(NULL));
-
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            // Generate random float between min_val and max_val
-            float random_val =
-                ((float)rand() / RAND_MAX) * (max_val - min_val) + min_val;
-            matrix[i][j] = random_val;
+    // Use OpenMP for parallel generation
+    #pragma omp parallel
+    {
+        // Each thread gets its own random state
+        unsigned int seed = (unsigned int)(time(NULL) + omp_get_thread_num() * 12345);
+        
+        #pragma omp for collapse(2) schedule(static)
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                // Generate random float between min_val and max_val using fast xorshift
+                unsigned int rand_int = xorshift32(&seed);
+                matrix[i][j] = ((float)rand_int * scale) + min_val;
+            }
         }
     }
 
