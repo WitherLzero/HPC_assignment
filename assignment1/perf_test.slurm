@@ -20,14 +20,14 @@ echo "Starting performance test..."
 echo "Matrix Size | Execution Time (seconds) | Memory Usage (MB) | Status"
 echo "--------------------------------------------------------------------"
 echo "Example output format:"
+echo "1000x1000 | 0.1 | 4 | SUCCESS"
 echo "10000x10000 | 2 | 400 | SUCCESS"
 echo "100000x100000 | 45 | 40000 | SUCCESS"
-echo "1000000x1000000 | 1200 | 4000000 | SUCCESS"
-echo "10000000x10000000 | 4500 | 400000000 | TIME_LIMIT_EXCEEDED"
+echo "1000000x1000000 | 1200 | 4000000 | OUT_OF_MEMORY"
 echo ""
 
 # Initialize matrix size starting from 10^4
-matrix_size=10000
+matrix_size=1000
 max_time=3600  # 1 hour in seconds
 time_limit_reached=false
 
@@ -38,30 +38,19 @@ while [ "$time_limit_reached" = false ]; do
     # Using the hint: ./build/conv_test -T -H 20000 -W 20000 -kH 3 -kW 3
     start_time=$(date +%s)
     
-    # Start memory monitoring in background
-    memory_log="/tmp/memory_usage_$$.log"
-    (while true; do
-        ps -o pid,vsz,rss,comm -p $$ 2>/dev/null | grep conv_test | awk '{print $3}' >> "$memory_log" 2>/dev/null || true
-        sleep 0.1
-    done) &
-    monitor_pid=$!
-    
     # Run the test and capture both output and timing
-    output=$(./build/conv_test -T -H $matrix_size -W $matrix_size -kH 3 -kW 3 2>&1)
+    # Use /usr/bin/time to get memory usage
+    time_output=$(/usr/bin/time -v ./build/conv_test -T -H $matrix_size -W $matrix_size -kH 3 -kW 3 2>&1)
     exit_code=$?
-    
-    # Stop memory monitoring
-    kill $monitor_pid 2>/dev/null || true
-    wait $monitor_pid 2>/dev/null || true
+    output=$(echo "$time_output" | grep -v "Command being timed" | grep -v "User time" | grep -v "System time" | grep -v "Percent of CPU" | grep -v "Elapsed" | grep -v "Average" | grep -v "Maximum" | grep -v "Major" | grep -v "Minor" | grep -v "File" | grep -v "Voluntary" | grep -v "Involuntary" | grep -v "Swaps" | grep -v "Page" | grep -v "Exit" | grep -v "Command" | grep -v "Maximum resident set size")
     
     end_time=$(date +%s)
     actual_time=$((end_time - start_time))
     
-    # Calculate peak memory usage in MB
-    if [ -f "$memory_log" ] && [ -s "$memory_log" ]; then
-        peak_memory_kb=$(sort -n "$memory_log" | tail -1)
+    # Extract peak memory usage from time output
+    peak_memory_kb=$(echo "$time_output" | grep "Maximum resident set size" | awk '{print $6}')
+    if [ -n "$peak_memory_kb" ] && [ "$peak_memory_kb" -gt 0 ]; then
         peak_memory_mb=$((peak_memory_kb / 1024))
-        rm -f "$memory_log"
     else
         peak_memory_mb="N/A"
     fi
@@ -85,8 +74,13 @@ while [ "$time_limit_reached" = false ]; do
             matrix_size=$((matrix_size * 10))
         fi
     else
-        echo "${matrix_size}x${matrix_size} | FAILED | ${peak_memory_mb} | ERROR (exit code: $exit_code)"
-        echo "Error output: $output"
+        if [ $exit_code -eq 137 ]; then
+            echo "${matrix_size}x${matrix_size} | OOM | ${peak_memory_mb} | OUT_OF_MEMORY (killed by system)"
+            echo "Matrix size ${matrix_size}x${matrix_size} caused out-of-memory condition"
+        else
+            echo "${matrix_size}x${matrix_size} | FAILED | ${peak_memory_mb} | ERROR (exit code: $exit_code)"
+            echo "Error output: $output"
+        fi
         time_limit_reached=true
     fi
     
