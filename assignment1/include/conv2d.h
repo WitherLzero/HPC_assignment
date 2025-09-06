@@ -74,6 +74,14 @@ void generate_padded_matrix(float **input, int height, int width,
                             float ***padded, int *padded_height,
                             int *padded_width);
 
+// New functions to read/generate directly into padded matrix
+int read_matrix_into_padded(const char *filename, int kernel_height, int kernel_width,
+                           float ***padded, int *padded_height, int *padded_width,
+                           int *original_height, int *original_width);
+float **generate_random_matrix_into_padded(int height, int width, int kernel_height, int kernel_width,
+                                          float min_val, float max_val, float ***padded,
+                                          int *padded_height, int *padded_width);
+
 /**
  * @brief Compare two matrices element-wise within an absolute tolerance.
  *

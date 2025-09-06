@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 #include <limits.h>
 #include <omp.h>
@@ -121,4 +120,93 @@ float **generate_random_matrix(int rows, int cols, float min_val,
     }
 
     return matrix;
+}
+
+// Read matrix from file directly into padded format
+int read_matrix_into_padded(const char *filename, int kernel_height, int kernel_width,
+                           float ***padded, int *padded_height, int *padded_width,
+                           int *original_height, int *original_width) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        perror("Error: Cannot open file");
+        return -1;
+    }
+
+    // Read dimensions
+    if (fscanf(file, "%d %d", original_height, original_width) != 2) {
+        perror("Error: Cannot read matrix dimensions");
+        fclose(file);
+        return -1;
+    }
+
+    // Calculate padding
+    int pad_top = (kernel_height - 1) / 2;
+    int pad_left = (kernel_width - 1) / 2;
+    int pad_bottom = kernel_height - 1 - pad_top;
+    int pad_right = kernel_width - 1 - pad_left;
+
+    *padded_height = *original_height + pad_top + pad_bottom;
+    *padded_width = *original_width + pad_left + pad_right;
+    
+    // Allocate padded matrix
+    *padded = allocate_matrix(*padded_height, *padded_width);
+    initialize_matrix(*padded, *padded_height, *padded_width, 0.0f);
+
+    // Read matrix data directly into the center of the padded matrix
+    for (int i = 0; i < *original_height; i++) {
+        for (int j = 0; j < *original_width; j++) {
+            if (fscanf(file, "%f", &(*padded)[i + pad_top][j + pad_left]) != 1) {
+                perror("Error: Cannot read matrix element");
+                free_matrix(*padded, *padded_height);
+                fclose(file);
+                return -1;
+            }
+        }
+    }
+
+    fclose(file);
+    return 0;
+}
+
+// Generate random matrix directly into padded format
+float **generate_random_matrix_into_padded(int height, int width, int kernel_height, int kernel_width,
+                                          float min_val, float max_val, float ***padded,
+                                          int *padded_height, int *padded_width) {
+    // Calculate padding
+    int pad_top = (kernel_height - 1) / 2;
+    int pad_left = (kernel_width - 1) / 2;
+    int pad_bottom = kernel_height - 1 - pad_top;
+    int pad_right = kernel_width - 1 - pad_left;
+
+    *padded_height = height + pad_top + pad_bottom;
+    *padded_width = width + pad_left + pad_right;
+    
+    // Allocate padded matrix
+    *padded = allocate_matrix(*padded_height, *padded_width);
+    initialize_matrix(*padded, *padded_height, *padded_width, 0.0f);
+
+    // Pre-calculate range for efficiency
+    const float range = max_val - min_val;
+    const float inv_max = 1.0f / (float)UINT_MAX;
+    const float scale = range * inv_max;
+
+    // Use OpenMP for parallel generation directly into padded matrix
+    #pragma omp parallel
+    {
+        // Each thread gets its own random state
+        unsigned int seed = (unsigned int)(time(NULL) + omp_get_thread_num() * 12345);
+        
+        #pragma omp for collapse(2) schedule(static)
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                // Generate random float between min_val and max_val using fast xorshift
+                unsigned int rand_int = xorshift32(&seed);
+                (*padded)[i + pad_top][j + pad_left] = ((float)rand_int * scale) + min_val;
+            }
+        }
+    }
+
+    // Return a pointer to the original data area (for compatibility with existing code)
+    // This allows the caller to access the original matrix if needed
+    return (*padded) + pad_top;
 }

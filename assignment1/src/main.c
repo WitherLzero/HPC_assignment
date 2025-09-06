@@ -126,20 +126,24 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    float **input = NULL;
     float **kernel = NULL;
+    float **padded = NULL;
+    int padded_height, padded_width;
+    int original_height, original_width;
 
     if (height != -1 && width != -1 && kernel_width != -1 &&
                      kernel_height != -1) {
         generate = 1;
-        // Generate random matrices
+        // Generate random matrices directly into padded format
         if (verbose) {
             printf("Generating random matrices...\n");
         }
 
-        input = generate_random_matrix(height, width, 0.0f, 1.0f);
-        kernel =
-            generate_random_matrix(kernel_height, kernel_width, 0.0f, 1.0f);
+        generate_random_matrix_into_padded(height, width, kernel_height, kernel_width,
+                                          0.0f, 1.0f, &padded, &padded_height, &padded_width);
+        kernel = generate_random_matrix(kernel_height, kernel_width, 0.0f, 1.0f);
+        original_height = height;
+        original_width = width;
 
         if (verbose) {
             printf("Generated feature map: %dx%d\n", height, width);
@@ -159,10 +163,14 @@ int main(int argc, char *argv[]) {
             perror("Error read kernel file");
             exit(EXIT_FAILURE);
         }
-        if (read_matrix_from_file(input_file, &input, &height, &width) == -1) {
+        if (read_matrix_into_padded(input_file, kernel_height, kernel_width,
+                                   &padded, &padded_height, &padded_width,
+                                   &original_height, &original_width) == -1) {
             perror("Error read inputfile");
             goto checkpoint1;
         }
+        height = original_height;
+        width = original_width;
 
         if (verbose) {
             printf("Loaded feature map: %dx%d\n", height, width);
@@ -175,12 +183,6 @@ int main(int argc, char *argv[]) {
         perror("Error: Kernel size cannot be larger than input size");
         goto checkpoint2;
     }
-
-    // Generate Padded matrix
-    float **padded;
-    int padded_height, padded_width;
-    generate_padded_matrix(input, height, width, kernel_height, kernel_width,
-                           &padded, &padded_height, &padded_width);
 
     // Allocate output matrix
     float **output = allocate_matrix(height, width);
@@ -221,13 +223,28 @@ int main(int argc, char *argv[]) {
                    kernel_file);
         }
 
-        if (write_matrix_to_file(input_file, input, height, width) == -1) {
+        // Extract original input from padded matrix for writing
+        float **input_for_writing = allocate_matrix(height, width);
+        int pad_top = (kernel_height - 1) / 2;
+        int pad_left = (kernel_width - 1) / 2;
+        
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                input_for_writing[i][j] = padded[i + pad_top][j + pad_left];
+            }
+        }
+
+        if (write_matrix_to_file(input_file, input_for_writing, height, width) == -1) {
+            free_matrix(input_for_writing, height);
             goto failure;
         }
         if (write_matrix_to_file(kernel_file, kernel, kernel_height,
                                  kernel_width) == -1) {
+            free_matrix(input_for_writing, height);
             goto failure;
         }
+        
+        free_matrix(input_for_writing, height);
     }
 
     // Output results
@@ -260,7 +277,6 @@ int main(int argc, char *argv[]) {
     }
 
     // Clean up
-    free_matrix(input, height);
     free_matrix(kernel, kernel_height);
     free_matrix(padded, padded_height);
     free_matrix(output, height);
@@ -274,9 +290,8 @@ int main(int argc, char *argv[]) {
 failure:
     // Clean up
     free_matrix(output, height);
-    free_matrix(padded, padded_height);
 checkpoint2:
-    free_matrix(input, height);
+    free_matrix(padded, padded_height);
 checkpoint1:
     free_matrix(kernel, kernel_height);
 
