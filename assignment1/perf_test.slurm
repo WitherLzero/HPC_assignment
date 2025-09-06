@@ -27,25 +27,23 @@ echo "1000000x1000000 | 1200 | 4000000 | OUT_OF_MEMORY"
 echo ""
 
 # Initialize matrix size starting from 10^4
-matrix_size=1000
+matrix_size=10000
 max_time=3600  # 1 hour in seconds
 time_limit_reached=false
 
 while [ "$time_limit_reached" = false ]; do
     echo "Testing matrix size: ${matrix_size}x${matrix_size}"
     
-    # Run the convolution test and capture the execution time and memory usage
-    # Using the hint: ./build/conv_test -T -H 20000 -W 20000 -kH 3 -kW 3
-    start_time=$(date +%s)
-    
-    # Run the test and capture both output and timing
-    # Use /usr/bin/time to get memory usage
+    # Run the convolution test and capture execution time and memory usage
+    # Use /usr/bin/time to get memory usage while running the program
     time_output=$(/usr/bin/time -v ./build/conv_test -T -H $matrix_size -W $matrix_size -kH 3 -kW 3 2>&1)
     exit_code=$?
-    output=$(echo "$time_output" | grep -v "Command being timed" | grep -v "User time" | grep -v "System time" | grep -v "Percent of CPU" | grep -v "Elapsed" | grep -v "Average" | grep -v "Maximum" | grep -v "Major" | grep -v "Minor" | grep -v "File" | grep -v "Voluntary" | grep -v "Involuntary" | grep -v "Swaps" | grep -v "Page" | grep -v "Exit" | grep -v "Command" | grep -v "Maximum resident set size")
     
-    end_time=$(date +%s)
-    actual_time=$((end_time - start_time))
+    # Extract execution time from program output (the program outputs just the time in seconds)
+    conv_time=$(echo "$time_output" | grep -E "^[0-9]+$" | tail -1)
+    if [ -z "$conv_time" ]; then
+        conv_time="N/A"
+    fi
     
     # Extract peak memory usage from time output
     peak_memory_kb=$(echo "$time_output" | grep "Maximum resident set size" | awk '{print $6}')
@@ -55,23 +53,17 @@ while [ "$time_limit_reached" = false ]; do
         peak_memory_mb="N/A"
     fi
     
-    # Extract the actual convolution time from the output if available
-    conv_time=$(echo "$output" | grep -o "Convolution time: [0-9.]* seconds" | grep -o "[0-9.]*" | tail -1)
-    if [ -z "$conv_time" ]; then
-        conv_time="N/A"
-    fi
-    
     # Check if execution was successful
     if [ $exit_code -eq 0 ]; then
         echo "${matrix_size}x${matrix_size} | ${conv_time} | ${peak_memory_mb} | SUCCESS"
         
-        # Check if we've exceeded the time limit
-        if [ $actual_time -gt $max_time ]; then
-            echo "Time limit exceeded! Matrix size ${matrix_size}x${matrix_size} took ${actual_time} seconds (> 1 hour)"
+        # Check if we've exceeded the time limit using program's execution time
+        if [ "$conv_time" != "N/A" ] && [ "$conv_time" -gt $max_time ]; then
+            echo "Time limit exceeded! Matrix size ${matrix_size}x${matrix_size} took ${conv_time} seconds (> 1 hour)"
             time_limit_reached=true
         else
             # Increase matrix size by 10x
-            matrix_size=$((matrix_size * 10))
+            matrix_size=$((matrix_size + 10000))
         fi
     else
         if [ $exit_code -eq 137 ]; then
