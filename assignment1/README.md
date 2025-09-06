@@ -7,7 +7,8 @@ This project implements a fast parallel 2D convolution library using OpenMP for 
 - **Serial and Parallel Implementations**: Both single-threaded and OpenMP parallel versions
 - **"Same" Padding**: Maintains input and output dimensions
 - **Flexible I/O**: Read from files or generate random matrices
-- **Performance Timing**: Built-in timing functionality
+- **Performance Timing**: Built-in timing functionality in milliseconds and seconds
+- **Verification Mode**: Compare results with expected output using precision control
 - **Command-line Interface**: Easy-to-use CLI with getopt
 
 ## Building
@@ -21,6 +22,10 @@ This project implements a fast parallel 2D convolution library using OpenMP for 
 ### Install Dependencies
 
 ```bash
+# Install dependencies automatically
+make install-deps
+
+# Or manually:
 # Ubuntu/Debian
 sudo apt-get install libomp-dev
 
@@ -34,7 +39,7 @@ brew install libomp
 ### Build
 
 ```bash
-# Build the project
+# Build the project (default)
 make
 
 # Build with debug flags
@@ -42,6 +47,9 @@ make debug
 
 # Clean build artifacts
 make clean
+
+# Show available targets
+make help
 ```
 
 ## Usage
@@ -50,13 +58,13 @@ make clean
 
 ```bash
 # Process existing input files
-./conv_test -f f.txt -g g.txt -o output.txt
+./build/conv_test -f f.txt -g g.txt -o output.txt
 
 # Generate random matrices and process
-./conv_test -H 1000 -W 1000 -kH 3 -kW 3
+./build/conv_test -H 1000 -W 1000 -kH 3 -kW 3
 
 # Generate and save all matrices
-./conv_test -H 1000 -W 1000 -kH 3 -kW 3 -f f.txt -g g.txt -o output.txt
+./build/conv_test -H 1000 -W 1000 -kH 3 -kW 3 -f f.txt -g g.txt -o output.txt
 ```
 
 ### Command-line Options
@@ -68,8 +76,10 @@ make clean
 - `-W WIDTH`: Width of generated matrix (default: 1000)
 - `-kH HEIGHT`: Height of generated kernel (default: 3)
 - `-kW WIDTH`: Width of generated kernel (default: 3)
+- `-p PRECI`: Enable verify mode with precision of floating point (1 ==> 0.1)
 - `-s`: Use serial implementation (default: parallel)
-- `-t`: Time the execution
+- `-t`: Time the execution in milliseconds
+- `-T`: Time the execution in seconds
 - `-v`: Verbose output
 - `-h`: Show help message
 
@@ -79,17 +89,20 @@ make clean
 # Test with provided test cases
 make test
 
-# Run performance tests
-make perf
-
 # Compare serial vs parallel performance
 make compare
 
 # Time execution with verbose output
-./conv_test -H 500 -W 500 -kH 3 -kW 3 -t -v
+./build/conv_test -H 500 -W 500 -kH 3 -kW 3 -t -v
 
 # Use serial implementation
-./conv_test -H 1000 -W 1000 -kH 3 -kW 3 -s -t
+./build/conv_test -H 1000 -W 1000 -kH 3 -kW 3 -s -t
+
+# Verify with precision 2
+./build/conv_test -f f.txt -g g.txt -o expected.txt -p 2
+
+# Generate test matrices
+./build/conv_test -H 1000 -W 1000 -kH 7 -kW 7 -Gst -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
 ```
 
 ## File Format
@@ -120,9 +133,9 @@ Example:
 - Supports arbitrary kernel sizes
 
 ### Parallelization
-- Uses OpenMP with `#pragma omp parallel for collapse(2)`
-- Static scheduling for load balancing
-- Parallelizes the outer two loops of the convolution operation
+- Uses OpenMP for parallel execution
+- Parallelizes the convolution operation
+- Supports both serial and parallel implementations
 
 ### Memory Layout
 - Row-major order for better cache locality
@@ -142,7 +155,7 @@ The project includes several test cases in the `f/`, `g/`, and `o/` directories.
 make test
 ```
 
-This will test all provided test cases and compare outputs.
+This will test all provided test cases with 2 threads (`-p 2`) and timing enabled (`-t`).
 
 ## Performance Analysis
 
@@ -150,14 +163,31 @@ For performance analysis, use the timing functionality:
 
 ```bash
 # Time different matrix sizes
-./conv_test -H 100 -W 100 -kH 3 -kW 3 -t
-./conv_test -H 500 -W 500 -kH 3 -kW 3 -t
-./conv_test -H 1000 -W 1000 -kH 3 -kW 3 -t
+./build/conv_test -H 100 -W 100 -kH 3 -kW 3 -t
+./build/conv_test -H 500 -W 500 -kH 3 -kW 3 -t
+./build/conv_test -H 1000 -W 1000 -kH 3 -kW 3 -t
 
 # Compare serial vs parallel
-./conv_test -H 1000 -W 1000 -kH 3 -kW 3 -s -t  # Serial
-./conv_test -H 1000 -W 1000 -kH 3 -kW 3 -t     # Parallel
+make compare
+
+# Or manually:
+./build/conv_test -H 1000 -W 1000 -kH 7 -kW 7 -s -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt  # Serial
+./build/conv_test -H 1000 -W 1000 -kH 7 -kW 7 -t -p 2 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt  # Parallel
 ```
+
+## Verification Mode
+
+The program supports verification mode using the `-p` option:
+
+```bash
+# Verify with precision 1 (0.1 tolerance)
+./build/conv_test -f f.txt -g g.txt -o expected.txt -p 1
+
+# Verify with precision 2 (0.01 tolerance)
+./build/conv_test -f f.txt -g g.txt -o expected.txt -p 2
+```
+
+This will compare the computed result with the expected output file and report "Verify Pass!" or "Verify Failed!".
 
 ## Project Structure
 
@@ -168,7 +198,9 @@ assignment1/
 ├── src/
 │   ├── main.c            # Main program with CLI
 │   ├── conv2d.c          # Core convolution implementations
-│   └── matrix_io.c       # Matrix I/O and generation functions
+│   └── io.c              # Matrix I/O and generation functions
+├── build/                # Build directory (created by make)
+│   └── conv_test         # Executable
 ├── f/                    # Test input feature maps
 ├── g/                    # Test kernels
 ├── o/                    # Expected outputs
@@ -176,8 +208,12 @@ assignment1/
 └── README.md             # This file
 ```
 
-## Authors
+## Available Make Targets
 
-[Student Name] - [Student Number]
-[Student Name] - [Student Number] (if group work)
-
+- `make` or `make all`: Build the project (default)
+- `make debug`: Build with debug flags
+- `make clean`: Remove build artifacts
+- `make test`: Run tests with provided test cases
+- `make compare`: Compare serial vs parallel performance
+- `make install-deps`: Install OpenMP development libraries
+- `make help`: Show available targets

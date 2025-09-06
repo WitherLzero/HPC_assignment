@@ -45,29 +45,19 @@ clean:
 test: $(TARGET)
 	@echo "Testing with provided test cases..."
 	@echo "Test 0:"
-	./$(TARGET) -f f/f0.txt -g g/g0.txt -o o/t0.txt -t
+	./$(TARGET) -f f/f0.txt -g g/g0.txt -o o/o0.txt -p 2 -t
 	@echo "Test 1:"
-	./$(TARGET) -f f/f1.txt -g g/g1.txt -o o/t1.txt -t
+	./$(TARGET) -f f/f1.txt -g g/g1.txt -o o/o1.txt -p 2 -t
 	@echo "Test 2:"
-	./$(TARGET) -f f/f2.txt -g g/g2.txt -o o/t2.txt -t
+	./$(TARGET) -f f/f2.txt -g g/g2.txt -o o/o2.txt -p 2 -t
 	@echo "Test 3:"
-	./$(TARGET) -f f/f3.txt -g g/g3.txt -o o/t3.txt -t
-
-# Performance test
-perf: $(TARGET)
-	@echo "Running performance tests..."
-	@echo "Small matrix (100x100):"
-	./$(TARGET) -H 100 -W 100 -t -kH 3 -kW 3
-	@echo "Medium matrix (500x500):"
-	./$(TARGET) -H 500 -W 500 -t -kH 3 -kW 3
-	@echo "Large matrix (1000x1000):"
-	./$(TARGET) -H 1000 -W 1000 -t -kH 3 -kW 3
+	./$(TARGET) -f f/f3.txt -g g/g3.txt -o o/o3.txt -p 2 -t
 
 # Compare serial vs parallel 
 compare: $(TARGET)
 	@echo "Comparing serial vs parallel performance..."
 	@echo "Serial implementation (1000x1000):"
-	./$(TARGET) -Gst -H 5000 -W 5000 -kH 3 -kW 3 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
+	./$(TARGET) -Gst -H 1000 -W 1000 -kH 7 -kW 7 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
 	@echo "Parallel implementation (1000x1000):"
 	./$(TARGET) -t -p 2 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
 
@@ -91,7 +81,6 @@ help:
 	@echo "  debug      - Build with debug flags"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  test       - Run tests with provided test cases"
-	@echo "  perf       - Run performance tests"
 	@echo "  compare    - Compare serial vs parallel performance"
 	@echo "  install-deps - Install OpenMP development libraries"
 	@echo "  help       - Show this help message"

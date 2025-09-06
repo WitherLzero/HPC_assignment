@@ -19,18 +19,16 @@ void print_usage(const char *program_name) {
     printf("  -kW WIDTH   Width of generated kernel (default: 3)\n");
     printf("  -p  PRECI   Enable verify mode, won't output to file\n");
     printf("              with precision of floating point (1 ==> 0.1)\n");
-    printf("  -G          Generate mode\n");
     printf("  -s          Use serial implementation (default: parallel)\n");
-    printf("  -t          Time the execution\n");
+    printf("  -t          Time the execution in milliseconds\n");
+    printf("  -T          Time the execution in seconds\n");
     printf("  -v          Verbose output\n");
     printf("  -h          Show this help message\n");
     printf("\nExamples:\n");
-    printf("  Verify with example files:\n");
-    printf("  %s -f f0.txt -g g0.txt -o o0.txt -V\n", program_name);
     printf("  Generate tests:\n");
-    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3\n", program_name);
-    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -f f.txt -g g.txt -o o.txt\n",
-           program_name);
+    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -G -o o.txt\n", program_name);
+    printf("  Verify with example files and precision 2:\n");
+    printf("  %s -f f.txt -g g.txt -o o.txt -p 2\n", program_name);
 }
 
 int main(int argc, char *argv[]) {
@@ -46,6 +44,7 @@ int main(int argc, char *argv[]) {
     // int verify_mode = 0;
     int use_serial = 0;
     int time_execution = 0;
+    int time_execution_seconds = 0;
     int verbose = 0;
     int precision = -1;
 
@@ -59,7 +58,7 @@ int main(int argc, char *argv[]) {
 
     int long_index = 0;
     int opt;
-    while ((opt = getopt_long_only(argc, argv, "f:g:o:H:W:p:stvhG",
+    while ((opt = getopt_long_only(argc, argv, "f:g:o:H:W:p:stTvh",
                                    long_options, &long_index)) != -1) {
         switch (opt) {
             case 'f':
@@ -70,9 +69,6 @@ int main(int argc, char *argv[]) {
                 break;
             case 'o':
                 output_file = optarg;
-                break;
-            case 'G':
-                generate = 1;
                 break;
             case 'H':
                 height = atoi(optarg);
@@ -93,6 +89,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 't':
                 time_execution = 1;
+                break;
+            case 'T':
+                time_execution_seconds = 1;
                 break;
             case 'v':
                 verbose = 1;
@@ -130,13 +129,9 @@ int main(int argc, char *argv[]) {
     float **input = NULL;
     float **kernel = NULL;
 
-    if (generate || (!input_file && !kernel_file)) {
-        if (height == -1 || width == -1 || kernel_width == -1 ||
-            kernel_height == -1) {
-            perror("Wrong param");
-            exit(EXIT_FAILURE);
-        }
-
+    if (height != -1 && width != -1 && kernel_width != -1 &&
+                     kernel_height != -1) {
+        generate = 1;
         // Generate random matrices
         if (verbose) {
             printf("Generating random matrices...\n");
@@ -193,7 +188,7 @@ int main(int argc, char *argv[]) {
     // Perform convolution
     double start_time, end_time;
 
-    if (time_execution) {
+    if (time_execution || time_execution_seconds) {
         start_time = omp_get_wtime();
     }
 
@@ -213,7 +208,11 @@ int main(int argc, char *argv[]) {
 
     end_time = omp_get_wtime();
     if (time_execution) {
-        printf("Execution time: %.3f ms\n", (end_time - start_time)*1000);
+        printf("Execution time: %.3f ms\n", (end_time - start_time) * 1000);
+    }
+
+    if (time_execution_seconds) {
+        printf("%d\n", (int)(end_time - start_time));
     }
 
     if (generate && input_file && kernel_file) {
