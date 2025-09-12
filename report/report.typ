@@ -20,6 +20,7 @@
 
 #set par(justify: true, leading: 0.6em)
 
+#show figure: set block(breakable: true)
 
 #let codefence(body)={
   block(
@@ -27,7 +28,10 @@
   inset: 1em,
   width: 100%,
   breakable: true,
-  body
+  {
+      set smartquote(enabled: false)
+      body
+  }
 )
 }
 
@@ -130,6 +134,8 @@ Initial development, debugging, and correctness verification were performed on l
 
 
 == Report Overview
+This report presents our high-performance 2D convolution implementation, progressing from algorithm design through optimization to performance analysis. We begin with implementation details and serial baseline, then explore parallelization strategies using OpenMP. Memory layout and cache optimization techniques are examined, followed by comprehensive performance testing on the Kaya HPC cluster. The report concludes with potential improvements and a summary of achievements, highlighting the balance between algorithmic design and hardware considerations in achieving efficient large-scale convolution operations.
+
 
 
 = Implementation
@@ -346,22 +352,24 @@ Writing matrices maintains the same format with proper error handling and resour
 
 A comprehensive command-line interface provides flexible testing capabilities:
 
-#codefence(```bash
-Usage: ./conv_test [OPTIONS]
+#codefence(```plaintext
+Usage: ./build/conv_test [OPTIONS]
 Options:
   -f FILE     Input feature map file
   -g FILE     Input kernel file
   -o FILE     Output file (optional)
-  -H HEIGHT   Height of generated matrix
-  -W WIDTH    Width of generated matrix
-  -kH HEIGHT  Height of generated kernel
-  -kW WIDTH   Width of generated kernel
-  -p  PRECI   Enable verify mode with floating point precision
+  -H HEIGHT   Height of generated matrix 
+  -W WIDTH    Width of generated matrix 
+  -kH HEIGHT  Height of generated kernel 
+  -kW WIDTH   Width of generated kernel 
+  -p  PRECI   Enable verify mode, won't output to file
+              with precision of floating point (1 ==> 0.1)
   -s          Use serial implementation (default: parallel)
-  -t          Time execution in milliseconds
-  -T          Time execution in seconds
+  -t          Time the execution in milliseconds
+  -T          Time the execution in seconds
   -v          Verbose output
-  -h          Show help message
+  -h          Show this help message
+  -G          Generate feature map file only
 ```)
 
 // TODO: 帮我改一下程序里的help，我把 Default 都去掉了，你也可以看到正式程序逻辑没有 Default Value
@@ -485,7 +493,8 @@ To address the limitations of our basic parallel implementation, we developed an
 Our optimized implementation differentiates between common and arbitrary kernel sizes:
 
 #codefence(```c
-void conv2d_parallel_optimized(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
+void conv2d_parallel_optimized(float **restrict f, int H, int W, 
+                               float **restrict g, int kH, int kW, 
                                float **restrict output) {
     const int out_H = H - kH + 1;
     const int out_W = W - kW + 1;
@@ -630,7 +639,7 @@ This approach ensures optimal performance for common kernel sizes while maintain
 
 Our implementation represents all matrices (input feature map f, kernel g, and output) using a two-dimensional array structure with a pointer-to-pointer approach (`float **`). This representation was selected to balance performance requirements with implementation flexibility for convolution operations.
 
-#codefence(```c
+\ #codefence(```c
 #if defined(_ISOC11_SOURCE)
 #define ALIGNED_ALLOC_SUPPORTED
 #endif
@@ -806,7 +815,7 @@ This section evaluates our implementation using a two-stage approach: algorithm 
 The table below summarizes the key hardware and software characteristics of both test environments used in our evaluation. These specifications are essential for understanding the performance results and scaling behavior presented in subsequent sections.
 
 
-
+#show figure: set block(breakable: true)
 #figure(
   table(
     columns: (auto, auto, auto),
@@ -876,7 +885,7 @@ We employed a systematic black-box testing approach to verify both the functiona
 
 Our testing strategy focused on two key aspects: functional verification to confirm all required features are correctly implemented, and correctness verification to ensure that computational results are accurate across different scenarios.
 
-// #show figure: set block(breakable: true)
+#show figure: set block(breakable: true)
 #import table: cell, header
 #figure(
   table(
@@ -929,6 +938,7 @@ The implementation's internal verification mechanism uses high-precision floatin
 
 Following correctness verification, we conducted initial performance tests to quantify the speedup achieved by our parallel implementation compared to the serial baseline. These tests were performed on the Kaya HPC cluster with controlled workload sizes to establish baseline performance characteristics before more extensive analysis.
 
+#show figure: set block(breakable: false)
 #figure(
   table(
     columns: (auto, auto, auto, auto, auto),
@@ -962,6 +972,7 @@ We evaluated both strong and weak scaling characteristics of our optimized paral
 *Strong Scaling Analysis*:
 Strong scaling measures how performance improves when adding more processing units to solve a fixed-size problem. We used a constant matrix size of 50000×50000 with a 3×3 kernel and increased the number of threads from 8 to 48, focusing on the practical scaling range for high-performance computing tasks.
 
+#show figure: set block(breakable: false)
 #figure(
   table(
     columns: (auto, auto, auto, auto),
@@ -1002,11 +1013,11 @@ Weak scaling evaluates how execution time changes when the problem size and comp
 
 Our weak scaling analysis shows that execution time increases as both problem size and thread count grow proportionally. Efficiency starts at a reasonable 87% with 16 threads but decreases to 55.6% at 32 threads and further to 40.9% with 48 threads. This efficiency decline can be attributed to three factors:
 
-1. **Memory Bandwidth Limitations**: Larger matrices generate higher memory traffic, potentially saturating the memory subsystem.
+1. *Memory Bandwidth Limitations*: Larger matrices generate higher memory traffic, potentially saturating the memory subsystem.
 
-2. **NUMA Architecture Effects**: Thread distribution across multiple CPU sockets introduces additional latency, especially beyond 16 threads.
+2. *NUMA Architecture Effects*: Thread distribution across multiple CPU sockets introduces additional latency, especially beyond 16 threads.
 
-3. **Cache Contention**: As the total problem size increases, competition for cache resources reduces hit rates and increases memory access time.
+3. *Cache Contention*: As the total problem size increases, competition for cache resources reduces hit rates and increases memory access time.
 
 The execution time increases from 698.49 milliseconds (8 threads, 50000×50000 matrix) to 1705.71 milliseconds (48 threads, 122474×122474 matrix). These results suggest that memory-bound operations like convolution face challenges when scaled across multiple processors, which is important to consider when developing applications for large-scale data processing.
 
@@ -1060,7 +1071,8 @@ The table below presents the results of our extreme-scale stress tests using a 5
   caption: [Extreme-scale performance results with 5×5 kernel and 48 threads],
 ) <tbl:stress-test>
 
-The processing rate is measured in millions of pixels per second (MP/s), calculated as $N^2 / "time in seconds" times 10^{-6}$.
+The processing rate is measured in millions of pixels per second (MP/s), calculated as $N^2 / "time in seconds" times 10^(-6)$. 
+
 
 To further explore the impact of kernel size on performance at extreme scales, we conducted additional tests using our largest viable matrix size (440,000×440,000) with different kernel dimensions:
 
@@ -1081,11 +1093,11 @@ To further explore the impact of kernel size on performance at extreme scales, w
 
 Our stress test results highlight two critical aspects of our implementation's performance limits:
 
-1. *Memory-Bounded Maximum Problem Size*: The 440,000×440,000 matrix represents the practical upper limit for our implementation on a single Kaya node, consuming 1443GB (approximately 96% of the available 1.5TB memory). This confirms our theoretical analysis that predicted a maximum size of approximately 325,000×325,000 when accounting for memory overhead. While larger problems might be theoretically computable within the one-hour constraint, memory availability becomes the limiting factor before computation time. As shown in Table <tbl:stress-test>, even at this extreme scale, our implementation maintains a consistent processing rate of approximately 85.6 MP/s, indicating robust scaling behavior.
+1. *Memory-Bounded Maximum Problem Size*: The 440,000×440,000 matrix represents the practical upper limit for our implementation on a single Kaya node, consuming 1443GB (approximately 96% of the available 1.5TB memory). This confirms our theoretical analysis that predicted a maximum size of approximately 325,000×325,000 when accounting for memory overhead. \ While larger problems might be theoretically computable within the one-hour constraint, memory availability becomes the limiting factor before computation time. As shown in Table <tbl:stress-test>, even at this extreme scale, our implementation maintains a consistent processing rate of approximately 85.6 MP/s, indicating robust scaling behavior.
 
-2. *Kernel Size Performance Impact*: Table <tbl:kernel-impact> demonstrates that kernel size significantly affects processing rates while having minimal impact on memory usage. With our largest 440,000×440,000 matrix, the processing rate decreases from 104.9 MP/s with a 3×3 kernel to 66.6 MP/s with a 7×7 kernel. This inverse relationship between kernel size and performance follows the expected computational complexity of $O(k^2)$, reflecting the additional arithmetic operations required for larger kernels. Importantly, execution time remains under one hour even with larger kernel dimensions, making our implementation practical for real-world convolution tasks with various kernel configurations.
+2. *Kernel Size Performance Impact*: Table <tbl:kernel-impact> demonstrates that kernel size significantly affects processing rates while having minimal impact on memory usage. With our largest 440,000×440,000 matrix, the processing rate decreases from 104.9 MP/s with a 3×3 kernel to 66.6 MP/s with a 7×7 kernel. This inverse relationship between kernel size and performance follows the expected computational complexity of $O(k^2)$, reflecting the additional arithmetic operations required for larger kernels. Importantly, execution time remains under one hour even with larger kernel dimensions, making our implementation practical for real-world convolution tasks with various kernel configurations. 
 
-= Discussion and Future Directions
+= Discussions
 
 While our implementation achieves high performance for large-scale 2D convolution operations, our stress tests revealed that memory becomes the primary bottleneck when processing extremely large matrices. Based on this finding, we propose the following practical improvements for future work:
 
@@ -1115,7 +1127,8 @@ A theoretical approach to address the memory limitation is to adopt a one-dimens
 
 2. *Memory Allocation Implementation*: The following code shows how to efficiently allocate a flattened array:
 
-```c
+
+#codefence(```c
 // Allocate a flattened matrix
 float *allocate_matrix_flatten(int rows, int cols) {
     float *matrix = NULL;
@@ -1126,12 +1139,14 @@ float *allocate_matrix_flatten(int rows, int cols) {
     }
     return matrix;
 }
+```)
+
+
 
 
 
 3. *Parallel Convolution Design*: A conceptual approach for parallel convolution using flattened arrays could be designed as follows:
-
-```
+#codefence(```
 ALGORITHM FlattenedConvolution2D
 INPUT: 
     f: one-dimensional array representing input matrix of size H×W
@@ -1168,7 +1183,7 @@ BEGIN
         END FOR
     END PARALLEL FOR
 END
-```
+```)
 
 This 1D array representation would theoretically allow processing matrices approximately 4× larger within the same memory constraints. For our current limit of 440,000×440,000 elements with 2D arrays, a 1D approach could potentially extend the maximum viable matrix size to nearly 880,000×880,000 elements, significantly expanding the scope of problems that could be solved on a single computing node.
 
@@ -1184,3 +1199,16 @@ Our third recommendation is to explore the use of explicit SIMD intrinsics rathe
 
 This approach could potentially deliver 1.5-2× performance improvement over compiler auto-vectorization, particularly for the inner loops of convolution operations where arithmetic intensity is high. The tradeoff between performance gains and increased implementation complexity would need to be carefully evaluated based on specific application requirements.
 
+= Conclusion
+
+This project successfully developed and analyzed a high-performance parallel implementation of 2D convolution using OpenMP. Through systematic optimization and comprehensive testing, we have achieved several significant outcomes:
+
+Our implementation demonstrates excellent scaling characteristics on shared-memory systems, achieving up to 17× speedup with 16 threads on medium-sized matrices. The parallel efficiency remained high (88%) when doubling from 8 to 16 threads, confirming the effectiveness of our thread assignment and load balancing strategies. The adoption of optimization techniques like specialized kernel handling and explicit SIMD directives further enhanced performance without sacrificing algorithm flexibility.
+
+Perhaps most notably, our stress testing pushed the boundaries of what's computationally feasible, successfully processing matrices of up to 440,000×440,000 elements (consuming 1.44TB of memory) with consistent processing rates of approximately 85.6 MP/s. This represents one of the largest 2D convolution operations documented on a single compute node, demonstrating the scalability of our approach to extreme problem sizes.
+
+The performance analysis revealed that our implementation is primarily memory-bound rather than compute-bound at extreme scales. While execution time scales approximately linearly with problem size, the total memory requirement ultimately limits the maximum processable matrix dimensions on a single node. This finding guided our proposed improvements focusing on memory efficiency and I/O streaming.
+
+Looking forward, the identified enhancement paths—block-based streaming, one-dimensional array layouts, and advanced SIMD intrinsics—offer promising directions for further optimization. These approaches could extend the practical limits of our implementation, potentially enabling convolution operations on matrices with trillions of elements across distributed memory systems.
+
+In conclusion, this project not only delivered a highly efficient parallel implementation of 2D convolution but also provided valuable insights into the scaling behavior and performance characteristics of memory-intensive algorithms on modern high-performance computing architectures.

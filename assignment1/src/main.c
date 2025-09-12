@@ -13,10 +13,10 @@ void print_usage(const char *program_name) {
     printf("  -f FILE     Input feature map file\n");
     printf("  -g FILE     Input kernel file\n");
     printf("  -o FILE     Output file (optional)\n");
-    printf("  -H HEIGHT   Height of generated matrix (default: 1000)\n");
-    printf("  -W WIDTH    Width of generated matrix (default: 1000)\n");
-    printf("  -kH HEIGHT  Height of generated kernel (default: 3)\n");
-    printf("  -kW WIDTH   Width of generated kernel (default: 3)\n");
+    printf("  -H HEIGHT   Height of generated matrix \n");
+    printf("  -W WIDTH    Width of generated matrix \n");
+    printf("  -kH HEIGHT  Height of generated kernel \n");
+    printf("  -kW WIDTH   Width of generated kernel \n");
     printf("  -p  PRECI   Enable verify mode, won't output to file\n");
     printf("              with precision of floating point (1 ==> 0.1)\n");
     printf("  -s          Use serial implementation (default: parallel)\n");
@@ -27,7 +27,7 @@ void print_usage(const char *program_name) {
     printf("  -G          Generate feature map file only");
     printf("\nExamples:\n");
     printf("  Generate tests:\n");
-    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -G -o o.txt\n", program_name);
+    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -G -f f.txt -g g.txt -o o.txt\n", program_name);
     printf("  Verify with example files and precision 2:\n");
     printf("  %s -f f.txt -g g.txt -o o.txt -p 2\n", program_name);
 }
