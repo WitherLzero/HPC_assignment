@@ -24,6 +24,7 @@ void print_usage(const char *program_name) {
     printf("  -T          Time the execution in seconds\n");
     printf("  -v          Verbose output\n");
     printf("  -h          Show this help message\n");
+    printf("  -G          Generate feature map file only");
     printf("\nExamples:\n");
     printf("  Generate tests:\n");
     printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -G -o o.txt\n", program_name);
@@ -47,6 +48,7 @@ int main(int argc, char *argv[]) {
     int time_execution_seconds = 0;
     int verbose = 0;
     int precision = -1;
+    int feature_only = 0;
 
     // Parse command line arguments using getopt_long_only to support -kH/-kW
     // as single-dash long options.
@@ -58,7 +60,7 @@ int main(int argc, char *argv[]) {
 
     int long_index = 0;
     int opt;
-    while ((opt = getopt_long_only(argc, argv, "f:g:o:H:W:p:stTvh",
+    while ((opt = getopt_long_only(argc, argv, "f:g:o:H:W:p:stTvhG",
                                    long_options, &long_index)) != -1) {
         switch (opt) {
             case 'f':
@@ -106,6 +108,9 @@ int main(int argc, char *argv[]) {
             case 'h':
                 print_usage(argv[0]);
                 exit(EXIT_SUCCESS);
+            case 'G':
+                feature_only = 1;
+                break;
             case OPT_KH:
                 kernel_height = atoi(optarg);
                 if (kernel_height <= 0) {
@@ -130,6 +135,31 @@ int main(int argc, char *argv[]) {
     float **padded = NULL;
     int padded_height, padded_width;
     int original_height, original_width;
+
+
+    if (feature_only) {
+        if (!output_file) {
+            perror("Error: Output file required for feature map generation");
+            exit(EXIT_FAILURE);
+        }
+        
+        if (verbose) {
+            printf("Generating feature map directly to file: %s\n", output_file);
+            printf("Dimensions: %dx%d\n", height, width);
+        }
+        
+        if (generate_feature_map(output_file, height, width) == -1) {
+            perror("Error: Failed to generate feature map");
+            exit(EXIT_FAILURE);
+        }
+        
+        if (verbose) {
+            printf("Feature map generation completed successfully.\n");
+        }
+        
+        return EXIT_SUCCESS;
+    }
+
 
     if (height != -1 && width != -1 && kernel_width != -1 &&
                      kernel_height != -1) {
@@ -204,8 +234,8 @@ int main(int argc, char *argv[]) {
         if (verbose) {
             printf("Running parallel convolution...\n");
         }
-        conv2d_parallel(padded, padded_height, padded_width, kernel,
-                        kernel_height, kernel_width, output);
+        conv2d_parallel_optimized(padded, padded_height, padded_width, kernel,
+                                         kernel_height, kernel_width, output);
     }
 
     end_time = omp_get_wtime();
@@ -214,7 +244,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (time_execution_seconds) {
-        printf("%d\n", (int)(end_time - start_time));
+        printf("Execution time:%d s\n", (int)(end_time - start_time));
     }
 
     if (generate && input_file && kernel_file) {

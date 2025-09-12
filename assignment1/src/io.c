@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <limits.h>
 #include <omp.h>
@@ -209,4 +210,93 @@ float **generate_random_matrix_into_padded(int height, int width, int kernel_hei
     // Return a pointer to the original data area (for compatibility with existing code)
     // This allows the caller to access the original matrix if needed
     return (*padded) + pad_top;
+}
+
+// Write matrix header (dimensions) to file
+int write_matrix_header(const char *filename, int rows, int cols) {
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        perror("Error: Cannot create file");
+        return -1;
+    }
+    
+    fprintf(file, "%d %d\n", rows, cols);
+    fclose(file);
+    return 0;
+}
+
+// Write matrix data in batches to file (appends to existing file)
+int write_matrix_data_batch(const char *filename, int start_row, int end_row, int cols, 
+                           float min_val, float max_val) {
+    FILE *file = fopen(filename, "a");
+    if (file == NULL) {
+        perror("Error: Cannot open file for writing");
+        return -1;
+    }
+    
+    // Pre-calculate range for efficiency
+    const float range = max_val - min_val;
+    const float inv_max = 1.0f / (float)UINT_MAX;
+    const float scale = range * inv_max;
+    
+    // Use OpenMP for parallel generation
+    #pragma omp parallel
+    {
+        // Each thread gets its own random state
+        unsigned int seed = (unsigned int)(time(NULL) + omp_get_thread_num() * 12345);
+        
+        // Allocate buffer for this thread's row
+        float *row_buffer = (float *)malloc(cols * sizeof(float));
+        
+        #pragma omp for schedule(static)
+        for (int i = start_row; i < end_row; i++) {
+            // Generate random values for this row
+            for (int j = 0; j < cols; j++) {
+                unsigned int rand_int = xorshift32(&seed);
+                row_buffer[j] = ((float)rand_int * scale) + min_val;
+            }
+            
+            // Write the row to file (single write operation per row)
+            #pragma omp critical
+            {
+                for (int j = 0; j < cols; j++) {
+                    fprintf(file, "%.3f", row_buffer[j]);
+                    if (j < cols - 1) {
+                        fprintf(file, " ");
+                    }
+                }
+                fprintf(file, "\n");
+            }
+        }
+        
+        free(row_buffer);
+    }
+    
+    fclose(file);
+    return 0;
+}
+
+int generate_feature_map(const char* filename, int height, int width) {
+    // Default batch size - can be adjusted based on available memory
+    const int BATCH_SIZE = 1000;  // Process 1000 rows at a time
+    
+    // Write matrix header first
+    if (write_matrix_header(filename, height, width) == -1) {
+        return -1;
+    }
+    
+    // Process matrix in batches
+    for (int start_row = 0; start_row < height; start_row += BATCH_SIZE) {
+        int end_row = start_row + BATCH_SIZE;
+        if (end_row > height) {
+            end_row = height;
+        }
+        
+        // Write this batch to file
+        if (write_matrix_data_batch(filename, start_row, end_row, width, 0.0f, 1.0f) == -1) {
+            return -1;
+        }
+    }
+    
+    return 0;
 }

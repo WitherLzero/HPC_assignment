@@ -1,0 +1,14 @@
+Matrix Size: 440000x440000
+Kernel Size: 4x6
+Mode: Parallel
+Wall clock time: 2478 seconds
+Program Execution time:2167 s
+Peak Memory: 1477161 MB (1442.54 GB)
+Start time: Wed 10 Sep 2025 17:13:02 AWST
+End time: Wed 10 Sep 2025 17:54:20 AWST
+
+== Error Output ==
+src/main.c: In function ‘main’:
+src/main.c:247:56: warning: ‘start_time’ may be used uninitialized in this function [-Wmaybe-uninitialized]
+  247 |         printf("Execution time:%d s\n", (int)(end_time - start_time));
+      |                                              ~~~~~~~~~~^~~~~~~~~~~~~

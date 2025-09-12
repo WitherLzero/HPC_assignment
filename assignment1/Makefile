@@ -57,7 +57,7 @@ test: $(TARGET)
 compare: $(TARGET)
 	@echo "Comparing serial vs parallel performance..."
 	@echo "Serial implementation (1000x1000):"
-	./$(TARGET) -Gst -H 1000 -W 1000 -kH 7 -kW 7 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
+	./$(TARGET) -st -H 1000 -W 1000 -kH 7 -kW 7 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
 	@echo "Parallel implementation (1000x1000):"
 	./$(TARGET) -t -p 2 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
 
