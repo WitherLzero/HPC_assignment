@@ -102,7 +102,7 @@ make compare
 ./build/conv_test -f f.txt -g g.txt -o expected.txt -p 2
 
 # Generate test matrices
-./build/conv_test -H 1000 -W 1000 -kH 7 -kW 7 -Gst -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
+./build/conv_test -H 1000 -W 1000 -kH 7 -kW 7 -f f/gen_f_1000.txt -g g/gen_g_1000.txt -o o/gen_o_1000.txt
 ```
 
 ## File Format

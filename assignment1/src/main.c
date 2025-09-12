@@ -24,10 +24,9 @@ void print_usage(const char *program_name) {
     printf("  -T          Time the execution in seconds\n");
     printf("  -v          Verbose output\n");
     printf("  -h          Show this help message\n");
-    printf("  -G          Generate feature map file only");
     printf("\nExamples:\n");
     printf("  Generate tests:\n");
-    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -G -f f.txt -g g.txt -o o.txt\n", program_name);
+    printf("  %s -H 1000 -W 1000 -kH 3 -kW 3 -f f.txt -g g.txt -o o.txt\n", program_name);
     printf("  Verify with example files and precision 2:\n");
     printf("  %s -f f.txt -g g.txt -o o.txt -p 2\n", program_name);
 }
