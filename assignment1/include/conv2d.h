@@ -34,26 +34,6 @@ void conv2d_parallel(float **restrict f, int H, int W, float **restrict g, int k
 
 
 /**
- * @brief Cache-optimized parallel implementation of 2D convolution
- * 
- * This implementation combines OpenMP parallelization with cache optimization:
- * - Loop tiling/blocking for better cache utilization
- * - Kernel reordering for improved spatial locality
- * - Vectorization hints for compiler optimization
- * - Optimized OpenMP scheduling for cache-friendly parallelization
- *
- * @param f Input matrix
- * @param H Number of rows in input matrix
- * @param W Number of columns in input matrix
- * @param g Kernel matrix
- * @param kH Number of rows in kernel matrix
- * @param kW Number of columns in kernel matrix
- * @param output Output matrix
- */
-void conv2d_parallel_cache_optimized(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
-                                     float **restrict output);
-
-/**
  * @brief Highly optimized parallel convolution with kernel-specific optimizations
  * 
  * This implementation uses multiple acceleration techniques:
