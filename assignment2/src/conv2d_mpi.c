@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
+
 
 void calculate_stride_output_dims(int input_H, int input_W, int stride_H, int stride_W,
                                   int *output_H, int *output_W) {
@@ -68,18 +70,45 @@ void conv2d_stride_hybrid(float **restrict f, int H, int W, float **restrict g, 
 }
 
 
-// TODO: cached-aligned allocator 
+
+// Use aligned_alloc for cache-line optimization (C11 standard)
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define ALIGNED_ALLOC_SUPPORTED
+#endif
+
+#ifndef CACHE_LINE_SIZE
+#define CACHE_LINE_SIZE 64  // Modern systems use 64-byte cache lines
+#endif
+
+// Debug utility to check cache alignment
+static inline int is_cache_aligned(const void *ptr) {
+    return ((uintptr_t)ptr % CACHE_LINE_SIZE) == 0;
+}
 
 // Matrix utility functions (reused from assignment1)
 float **allocate_matrix(int rows, int cols) {
-    float **matrix = (float **)malloc(rows * sizeof(float *));
+    float **matrix = NULL;
+
+#ifdef ALIGNED_ALLOC_SUPPORTED
+    // Allocate row pointers with cache-line alignment
+    matrix = (float **)aligned_alloc(CACHE_LINE_SIZE, rows * sizeof(float *));
+#else
+    // Fallback to malloc if aligned_alloc is not available
+    matrix = (float **)malloc(rows * sizeof(float *));
+#endif
+
     if (matrix == NULL) {
         fprintf(stderr, "Error: Unable to allocate matrix rows\n");
         return NULL;
     }
 
     for (int i = 0; i < rows; i++) {
+#ifdef ALIGNED_ALLOC_SUPPORTED
+        // Allocate each row with cache-line alignment
+        matrix[i] = (float *)aligned_alloc(CACHE_LINE_SIZE, cols * sizeof(float));
+#else
         matrix[i] = (float *)malloc(cols * sizeof(float));
+#endif
         if (matrix[i] == NULL) {
             fprintf(stderr, "Error: Unable to allocate matrix column %d\n", i);
             // Free previously allocated rows
@@ -90,6 +119,15 @@ float **allocate_matrix(int rows, int cols) {
             return NULL;
         }
     }
+
+#ifdef DEBUG
+    // Verify alignment in debug mode
+    printf("Matrix allocation: rows=%s, first_row=%s (%d x %d)\n",
+           is_cache_aligned(matrix) ? "aligned" : "unaligned",
+           is_cache_aligned(matrix[0]) ? "aligned" : "unaligned",
+           rows, cols);
+#endif
+
     return matrix;
 }
 
