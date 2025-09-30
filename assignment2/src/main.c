@@ -267,11 +267,37 @@ int main(int argc, char *argv[]) {
 
     // Calculate output dimensions
     calculate_stride_output_dims(input_H, input_W, stride_H, stride_W, &output_H, &output_W);
+
+    // Determine optimal number of processes (limit to output rows for MPI distribution)
+    int optimal_processes = (size > output_H) ? output_H : size;
+    bool is_active_process = (rank < optimal_processes);
+
+    // Create a sub-communicator for active processes only
+    MPI_Comm active_comm;
+    MPI_Comm_split(MPI_COMM_WORLD, is_active_process ? 0 : MPI_UNDEFINED, rank, &active_comm);
+
+    if (!is_active_process) {
+        // Inactive processes: allocate output but skip computation
+        output = allocate_matrix(output_H, output_W);
+        // Initialize output with zeros
+        for (int i = 0; i < output_H; i++) {
+            for (int j = 0; j < output_W; j++) {
+                output[i][j] = 0.0f;
+            }
+        }
+        // Skip to cleanup section
+        goto cleanup;
+    }
+
     output = allocate_matrix(output_H, output_W);
 
     if (rank == 0 && verbose) {
         printf("Padded input dimensions: %d x %d\n", padded_H, padded_W);
         printf("Output dimensions: %d x %d\n", output_H, output_W);
+        if (optimal_processes < size) {
+            printf("Using %d active processes (out of %d total) for optimal distribution.\n",
+                   optimal_processes, size);
+        }
     }
 
     // Perform convolution with timing
@@ -289,7 +315,7 @@ int main(int argc, char *argv[]) {
         }
     } else if (use_mpi_only) {
         conv2d_stride_mpi(padded_input, padded_H, padded_W, kernel, kernel_H, kernel_W,
-                         stride_H, stride_W, output, MPI_COMM_WORLD);
+                         stride_H, stride_W, output, active_comm);
     } else if (use_openmp_only) {
         if (rank == 0) {
             conv2d_stride_openmp(padded_input, padded_H, padded_W, kernel, kernel_H, kernel_W,
@@ -298,11 +324,11 @@ int main(int argc, char *argv[]) {
     } else {
         // Default: hybrid implementation
         conv2d_stride_hybrid(padded_input, padded_H, padded_W, kernel, kernel_H, kernel_W,
-                           stride_H, stride_W, output, MPI_COMM_WORLD);
+                           stride_H, stride_W, output, active_comm);
     }
 
     if (time_execution || time_execution_seconds) {
-        mpi_timer_end(&timer, MPI_COMM_WORLD);
+        mpi_timer_end(&timer, active_comm);
         if (rank == 0) {
             if (time_execution_seconds) {
                 printf("Timing - Convolution with stride: %.6f seconds\n", timer.elapsed_time);
@@ -352,6 +378,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+cleanup:
     // Cleanup
     free_matrix(input, input_H);
     free_matrix(kernel, kernel_H);

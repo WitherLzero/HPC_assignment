@@ -4,6 +4,7 @@
 #include <mpi.h>
 #include <omp.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 /**
  * @brief Serial implementation of 2D convolution with stride
@@ -116,6 +117,27 @@ void mpi_distribute_matrix(float **global_matrix, int global_H, int global_W,
                            int *local_start_row, MPI_Comm comm);
 
 /**
+ * @brief Stride-aware distribution of input matrix across MPI processes
+ *
+ * @param global_matrix Global input matrix (only valid on root)
+ * @param global_H Global matrix height
+ * @param global_W Global matrix width
+ * @param kernel_H Kernel height (for overlap calculation)
+ * @param kernel_W Kernel width (for overlap calculation)
+ * @param stride_H Stride in height direction
+ * @param stride_W Stride in width direction
+ * @param local_matrix Pointer to store local matrix portion
+ * @param local_H Pointer to store local matrix height
+ * @param local_W Pointer to store local matrix width
+ * @param local_start_row Pointer to store starting row in global coordinates
+ * @param comm MPI communicator
+ */
+void mpi_distribute_matrix_stride_aware(float **global_matrix, int global_H, int global_W,
+                                        int kernel_H, int kernel_W, int stride_H, int stride_W,
+                                        float ***local_matrix, int *local_H, int *local_W,
+                                        int *local_start_row, MPI_Comm comm);
+
+/**
  * @brief Gather output matrices from all MPI processes
  *
  * @param local_output Local output matrix
@@ -140,6 +162,18 @@ void mpi_gather_output(float **local_output, int local_output_H, int local_outpu
  * @param comm MPI communicator
  */
 void mpi_broadcast_kernel(float ***kernel, int kernel_H, int kernel_W, MPI_Comm comm);
+
+/**
+ * @brief Exchange halo regions between neighboring MPI processes
+ *
+ * @param local_matrix Local matrix with halo regions
+ * @param local_H Local matrix height (including halos)
+ * @param local_W Local matrix width
+ * @param kernel_H Kernel height (determines halo size)
+ * @param comm MPI communicator
+ */
+void mpi_exchange_halos(float **local_matrix, int local_H, int local_W,
+                       int kernel_H, MPI_Comm comm);
 
 // Matrix utility functions (reused from assignment1)
 float **allocate_matrix(int rows, int cols);
