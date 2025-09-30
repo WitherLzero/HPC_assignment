@@ -5,6 +5,10 @@
 #include <math.h>
 #include <stdint.h>
 
+// OpenMP performance tuning parameters
+#define OMP_CHUNK_SIZE 8        // Rows per chunk for dynamic scheduling
+#define PREFETCH_DISTANCE 2     // Rows to prefetch ahead
+#define MIN_PARALLEL_SIZE 100   // Minimum matrix size for parallelization
 
 void calculate_stride_output_dims(int input_H, int input_W, int stride_H, int stride_W,
                                   int *output_H, int *output_W) {
@@ -50,11 +54,141 @@ void conv2d_stride_serial(float **restrict f, int H, int W, float **restrict g, 
     }
 }
 
-// Placeholder implementations for parallel functions (not implemented yet)
+// OpenMP parallel implementation with stride
 void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output) {
-    printf("OpenMP implementation not yet implemented. Using serial version.\n");
-    conv2d_stride_serial(f, H, W, g, kH, kW, sH, sW, output);
+    #pragma omp parallel
+    {
+        #pragma omp single
+        {
+            printf("OpenMP General: Using %d threads\n", omp_get_num_threads());
+        }
+    }
+
+    // Calculate actual input dimensions (remove padding)
+    int original_H = H - kH + 1;
+    int original_W = W - kW + 1;
+
+    // Calculate strided output dimensions
+    int output_H = (int)ceil((double)original_H / sH);
+    int output_W = (int)ceil((double)original_W / sW);
+
+    // Check for minimum size threshold - use serial for small matrices
+    if (output_H * output_W < MIN_PARALLEL_SIZE) {
+        conv2d_stride_serial(f, H, W, g, kH, kW, sH, sW, output);
+        return;
+    }
+
+    // Select optimized implementation based on kernel size
+    if (kH == 3 && kW == 3) {
+        conv2d_3x3_stride_optimized_openmp(f, H, W, g, sH, sW, output);
+        return;
+    } else if (kH == 5 && kW == 5) {
+        conv2d_5x5_stride_optimized_openmp(f, H, W, g, sH, sW, output);
+        return;
+    }
+
+    // General OpenMP implementation
+    #pragma omp parallel
+    {
+        #pragma omp for schedule(dynamic, OMP_CHUNK_SIZE) nowait
+        for (int i = 0; i < output_H; i++) {
+            // Prefetch next input row for better cache performance
+            int next_row = (i + PREFETCH_DISTANCE) * sH;
+            if (next_row < H) {
+                __builtin_prefetch(&f[next_row][0], 0, 3);
+            }
+
+            for (int j = 0; j < output_W; j++) {
+                float sum = 0.0f;
+                int start_row = i * sH;
+                int start_col = j * sW;
+
+                // Apply kernel with bounds checking
+                if (start_row + kH <= H && start_col + kW <= W) {
+                    for (int ki = 0; ki < kH; ki++) {
+                        #pragma omp simd reduction(+:sum)
+                        for (int kj = 0; kj < kW; kj++) {
+                            sum += f[start_row + ki][start_col + kj] * g[ki][kj];
+                        }
+                    }
+                }
+
+                output[i][j] = sum;
+            }
+        }
+    }
+}
+
+// Optimized 3x3 kernel OpenMP implementation with stride
+void conv2d_3x3_stride_optimized_openmp(float **restrict f, int H, int W, float **restrict g,
+                                         int sH, int sW, float **restrict output) {
+    // Calculate actual input dimensions (remove padding)
+    int original_H = H - 2;  // 3x3 kernel needs 2 pixels of padding removed
+    int original_W = W - 2;
+
+    // Calculate strided output dimensions
+    int output_H = (int)ceil((double)original_H / sH);
+    int output_W = (int)ceil((double)original_W / sW);
+
+    // Cache kernel values for better performance
+    const float g00 = g[0][0], g01 = g[0][1], g02 = g[0][2];
+    const float g10 = g[1][0], g11 = g[1][1], g12 = g[1][2];
+    const float g20 = g[2][0], g21 = g[2][1], g22 = g[2][2];
+
+    // Parallel loop over output rows
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < output_H; i++) {
+        int row = i * sH;
+        for (int j = 0; j < output_W; j++) {
+            int col = j * sW;
+
+            // Fully unrolled 3x3 convolution
+            float sum = f[row][col]     * g00 + f[row][col+1]     * g01 + f[row][col+2]     * g02 +
+                        f[row+1][col]   * g10 + f[row+1][col+1]   * g11 + f[row+1][col+2]   * g12 +
+                        f[row+2][col]   * g20 + f[row+2][col+1]   * g21 + f[row+2][col+2]   * g22;
+
+            output[i][j] = sum;
+        }
+    }
+}
+
+// Optimized 5x5 kernel OpenMP implementation with stride
+void conv2d_5x5_stride_optimized_openmp(float **restrict f, int H, int W, float **restrict g,
+                                         int sH, int sW, float **restrict output) {
+    // Calculate actual input dimensions (remove padding)
+    int original_H = H - 4;  // 5x5 kernel needs 4 pixels of padding removed
+    int original_W = W - 4;
+
+    // Calculate strided output dimensions
+    int output_H = (int)ceil((double)original_H / sH);
+    int output_W = (int)ceil((double)original_W / sW);
+
+    // Cache all 25 kernel values for maximum performance
+    const float g00 = g[0][0], g01 = g[0][1], g02 = g[0][2], g03 = g[0][3], g04 = g[0][4];
+    const float g10 = g[1][0], g11 = g[1][1], g12 = g[1][2], g13 = g[1][3], g14 = g[1][4];
+    const float g20 = g[2][0], g21 = g[2][1], g22 = g[2][2], g23 = g[2][3], g24 = g[2][4];
+    const float g30 = g[3][0], g31 = g[3][1], g32 = g[3][2], g33 = g[3][3], g34 = g[3][4];
+    const float g40 = g[4][0], g41 = g[4][1], g42 = g[4][2], g43 = g[4][3], g44 = g[4][4];
+
+    // Parallel loop over output rows
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < output_H; i++) {
+        int row = i * sH;
+        for (int j = 0; j < output_W; j++) {
+            int col = j * sW;
+
+            // Fully unrolled 5x5 convolution
+            float sum =
+                f[row][col]     * g00 + f[row][col+1]     * g01 + f[row][col+2]     * g02 + f[row][col+3]     * g03 + f[row][col+4]     * g04 +
+                f[row+1][col]   * g10 + f[row+1][col+1]   * g11 + f[row+1][col+2]   * g12 + f[row+1][col+3]   * g13 + f[row+1][col+4]   * g14 +
+                f[row+2][col]   * g20 + f[row+2][col+1]   * g21 + f[row+2][col+2]   * g22 + f[row+2][col+3]   * g23 + f[row+2][col+4]   * g24 +
+                f[row+3][col]   * g30 + f[row+3][col+1]   * g31 + f[row+3][col+2]   * g32 + f[row+3][col+3]   * g33 + f[row+3][col+4]   * g34 +
+                f[row+4][col]   * g40 + f[row+4][col+1]   * g41 + f[row+4][col+2]   * g42 + f[row+4][col+3]   * g43 + f[row+4][col+4]   * g44;
+
+            output[i][j] = sum;
+        }
+    }
 }
 
 void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
@@ -84,6 +218,7 @@ void conv2d_stride_hybrid(float **restrict f, int H, int W, float **restrict g, 
 static inline int is_cache_aligned(const void *ptr) {
     return ((uintptr_t)ptr % CACHE_LINE_SIZE) == 0;
 }
+
 
 // Matrix utility functions (reused from assignment1)
 float **allocate_matrix(int rows, int cols) {

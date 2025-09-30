@@ -38,6 +38,18 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
                           int sH, int sW, float **restrict output);
 
 /**
+ * @brief Optimized 3x3 kernel OpenMP implementation with stride
+ */
+void conv2d_3x3_stride_optimized_openmp(float **restrict f, int H, int W, float **restrict g,
+                                         int sH, int sW, float **restrict output);
+
+/**
+ * @brief Optimized 5x5 kernel OpenMP implementation with stride
+ */
+void conv2d_5x5_stride_optimized_openmp(float **restrict f, int H, int W, float **restrict g,
+                                         int sH, int sW, float **restrict output);
+
+/**
  * @brief MPI distributed memory implementation of 2D convolution with stride
  *
  * @param f Input feature map (padded)
