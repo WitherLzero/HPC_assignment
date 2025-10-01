@@ -74,6 +74,6 @@ build/
 
 **/gen_*.txt
 CLAUDE.md
-ASSIGNMENT2_CONTEXT_SUMMARY.md
-assignment2/designs/cits3402_lab5.pdf
-assignment2/MPI_IMPLEMENTATION_CONTEXT.md
+*/ASSIGNMENT2_CONTEXT_SUMMARY.md
+**/cits3402_lab5.pdf
+*/MPI_IMPLEMENTATION_CONTEXT.md

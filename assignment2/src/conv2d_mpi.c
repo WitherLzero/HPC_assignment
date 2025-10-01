@@ -318,8 +318,127 @@ void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int
 
 void conv2d_stride_hybrid(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output, MPI_Comm comm) {
-    printf("Hybrid implementation not yet implemented. Using serial version.\n");
-    conv2d_stride_serial(f, H, W, g, kH, kW, sH, sW, output);
+    int rank, size;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
+
+    // Calculate global output dimensions
+    int global_output_H = (H - kH + 1 + sH - 1) / sH;
+    int global_output_W = (W - kW + 1 + sW - 1) / sW;
+
+    // Broadcast kernel to all processes
+    float **local_kernel;
+    if (rank == 0) {
+        local_kernel = g;
+    } else {
+        local_kernel = NULL;
+    }
+    mpi_broadcast_kernel(&local_kernel, kH, kW, comm);
+
+    // Distribute input matrix across processes
+    float **local_matrix;
+    int local_H, local_W, local_start_row;
+
+    if (sH > 1 || sW > 1) {
+        mpi_distribute_matrix_stride_aware(f, H, W, kH, kW, sH, sW, &local_matrix, &local_H, &local_W, &local_start_row, comm);
+    } else {
+        mpi_distribute_matrix(f, H, W, kH, kW, &local_matrix, &local_H, &local_W, &local_start_row, comm);
+    }
+
+    // Exchange halo regions with neighboring processes
+    if (size > 1 && local_matrix != NULL && local_H > 0) {
+        mpi_exchange_halos(local_matrix, local_H, local_W, kH, comm);
+    }
+
+    // Calculate local output dimensions and allocate output matrix
+    int local_output_H = 0, local_output_W = 0;
+    float **local_output = NULL;
+
+    if (local_matrix != NULL && local_H > 0) {
+        if (sH > 1 || sW > 1) {
+            int halo_size = (kH - 1) / 2;
+            int halo_top = (rank > 0) ? halo_size : 0;
+            int halo_bottom = (rank < size - 1) ? halo_size : 0;
+            int data_rows = local_H - halo_top - halo_bottom;
+
+            local_output_H = (data_rows - kH + 1 + sH - 1) / sH;
+            local_output_W = (local_W - kW + 1 + sW - 1) / sW;
+        } else {
+            local_output_H = (local_H - kH + 1 + sH - 1) / sH;
+            local_output_W = (local_W - kW + 1 + sW - 1) / sW;
+        }
+
+        local_output = allocate_matrix(local_output_H, local_output_W);
+    }
+
+
+    // Perform local computation with OpenMP
+    if (local_matrix != NULL && local_output != NULL && local_H > 0) {
+        if (sH > 1 || sW > 1) {
+            int halo_size = (kH - 1) / 2;
+            int halo_top = (rank > 0) ? halo_size : 0;
+
+            float **data_region = local_matrix + halo_top;
+            int data_region_H = local_H - halo_top - ((rank < size - 1) ? halo_size : 0);
+
+            conv2d_stride_openmp(data_region, data_region_H, local_W, local_kernel, kH, kW, sH, sW, local_output);
+        } else {
+            conv2d_stride_openmp(local_matrix, local_H, local_W, local_kernel, kH, kW, sH, sW, local_output);
+        }
+    }
+
+    // Calculate output start row for this process
+    int output_start_row;
+
+    if (sH > 1 || sW > 1) {
+        int output_base_rows = global_output_H / size;
+        int output_remainder = global_output_H % size;
+        int my_output_rows = output_base_rows + (rank < output_remainder ? 1 : 0);
+
+        if (my_output_rows > 0) {
+            output_start_row = rank * output_base_rows + (rank < output_remainder ? rank : output_remainder);
+        } else {
+            output_start_row = 0;
+        }
+    } else {
+        int base_rows = H / size;
+        int remainder = H % size;
+        int halo_size = (kH - 1) / 2;
+
+        output_start_row = 0;
+        for (int p = 0; p < rank; p++) {
+            int p_base_rows = base_rows + (p < remainder ? 1 : 0);
+            int p_halo_top = (p > 0) ? halo_size : 0;
+            int p_halo_bottom = (p < size - 1) ? halo_size : 0;
+            int p_local_H = p_base_rows + p_halo_top + p_halo_bottom;
+            int p_local_output_H = (p_local_H - kH + 1 + sH - 1) / sH;
+            output_start_row += p_local_output_H;
+        }
+    }
+
+    // Gather results from all processes
+    MPI_Barrier(comm);
+
+    float **gathered_output;
+    mpi_gather_output(local_output, local_output_H, local_output_W, output_start_row,
+                      &gathered_output, global_output_H, global_output_W, comm);
+
+    // Copy gathered output to the provided output matrix (root only)
+    if (rank == 0) {
+        for (int i = 0; i < global_output_H; i++) {
+            for (int j = 0; j < global_output_W; j++) {
+                output[i][j] = gathered_output[i][j];
+            }
+        }
+        free_matrix(gathered_output, global_output_H);
+    }
+
+    // Cleanup
+    free_matrix(local_matrix, local_H);
+    free_matrix(local_output, local_output_H);
+    if (rank != 0) {
+        free_matrix(local_kernel, kH);
+    }
 }
 
 
