@@ -117,6 +117,7 @@ static inline unsigned int xorshift32(unsigned int *state) {
     return x;
 }
 
+// CAN BE REMOVED ??? 
 float **mpi_generate_random_matrix(int rows, int cols, float min_val,
                                    float max_val, MPI_Comm comm) {
     int rank;
@@ -151,13 +152,75 @@ float **mpi_generate_random_matrix(int rows, int cols, float min_val,
         }
     }
 
-    // Broadcast the generated matrix to all processes
-    // for (int i = 0; i < rows; i++) {
-    //     MPI_Bcast(matrix[i], cols, MPI_FLOAT, 0, comm);
-    // }
+    return matrix;
+}
+
+// ===================================================================
+// PHASE 3: Direct Local Padded Matrix Generation (Memory-Optimized)
+// ===================================================================
+
+float** mpi_generate_local_padded_matrix(
+    int H_global, int W_global,
+    int kH, int kW,
+    int* padded_local_H,
+    int* padded_local_W,
+    int* local_start_row,
+    float min_val, float max_val,
+    MPI_Comm comm
+) {
+    int rank, size;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
+
+    // Calculate local dimensions and padding using Phase 2 utilities
+    int local_H, local_W;
+    calculate_local_dimensions(rank, size, H_global, W_global, kH, kW,
+                               &local_H, &local_W, local_start_row,
+                               padded_local_H, padded_local_W);
+
+    int pad_top, pad_bottom, pad_left, pad_right;
+    calculate_padding_for_process(rank, size, kH, kW,
+                                   &pad_top, &pad_bottom,
+                                   &pad_left, &pad_right);
+
+    // Allocate padded matrix
+    float **matrix = allocate_matrix(*padded_local_H, *padded_local_W);
+    if (matrix == NULL) {
+        fprintf(stderr, "Error: Rank %d failed to allocate local padded matrix\n", rank);
+        return NULL;
+    }
+
+    // Initialize all to zero (padding regions)
+    initialize_matrix(matrix, *padded_local_H, *padded_local_W, 0.0f);
+
+    // Generate data region with random values using xorshift
+    const float range = max_val - min_val;
+    const float inv_max = 1.0f / (float)UINT_MAX;
+    const float scale = range * inv_max;
+
+    #pragma omp parallel
+    {
+        // Each thread gets its own random seed
+        unsigned int seed = (unsigned int)(time(NULL) + rank * 12345
+                                        + omp_get_thread_num() * 67890);
+
+        #pragma omp for collapse(2) schedule(static)
+        for (int i = 0; i < local_H; i++) {
+            for (int j = 0; j < local_W; j++) {
+                // Generate random float using xorshift32
+                unsigned int rand_int = xorshift32(&seed);
+                float value = min_val + ((float)rand_int * scale);
+                matrix[i + pad_top][j + pad_left] = value;
+            }
+        }
+    }
 
     return matrix;
 }
+
+// ===================================================================
+// End of Phase 3: Direct Local Padded Matrix Generation
+// ===================================================================
 
 int mpi_compare_matrices(float **matrix1, float **matrix2, int rows, int cols,
                          float tolerance, MPI_Comm comm) {

@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
             if (rank == 0 && verbose) printf("Generated input saved to %s\n", input_file);
         }
         if (rank == 0 && kernel_file) {
-            write_matrix_to_file(kernel_file, kernel, kernel_H, kernel_W, MPI_COMM_WORLD);
+            write_matrix_to_file(kernel_file, kernel, kernel_H, kernel_W);
             if (rank == 0 && verbose) printf("Generated kernel saved to %s\n", kernel_file);
         }
     } else if (has_input_files) {

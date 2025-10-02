@@ -16,6 +16,68 @@ void calculate_stride_output_dims(int input_H, int input_W, int stride_H, int st
     *output_W = (int)ceil((double)input_W / stride_W);
 }
 
+// ===================================================================
+// PHASE 2: Padding Calculation Utilities (Memory-Optimized Plan)
+// ===================================================================
+
+void calculate_padding_for_process(
+    int rank, int size,
+    int kH, int kW,
+    int* pad_top, int* pad_bottom,
+    int* pad_left, int* pad_right
+) {
+    int halo = (kH - 1) / 2;
+
+    // Top padding
+    if (rank == 0) {
+        *pad_top = (kH - 1) / 2;        // "Same" padding for first process
+    } else {
+        *pad_top = halo;                // Halo (will be filled by exchange)
+    }
+
+    // Bottom padding
+    if (rank == size - 1) {
+        *pad_bottom = kH - 1 - (kH - 1) / 2;  // "Same" padding (asymmetric)
+    } else {
+        *pad_bottom = halo;             // Halo (will be filled by exchange)
+    }
+
+    // Horizontal padding (all processes same - "same" padding)
+    *pad_left = (kW - 1) / 2;
+    *pad_right = kW - 1 - (kW - 1) / 2;
+}
+
+void calculate_local_dimensions(
+    int rank, int size,
+    int H_global, int W_global,
+    int kH, int kW,
+    int* local_H, int* local_W,
+    int* local_start_row,
+    int* padded_local_H, int* padded_local_W
+) {
+    // Calculate local portion (row distribution)
+    int base_rows = H_global / size;
+    int remainder = H_global % size;
+
+    // Each process gets base_rows, first 'remainder' processes get one extra
+    *local_H = base_rows + (rank < remainder ? 1 : 0);
+    *local_start_row = rank * base_rows + (rank < remainder ? rank : remainder);
+    *local_W = W_global;
+
+    // Calculate padding
+    int pad_top, pad_bottom, pad_left, pad_right;
+    calculate_padding_for_process(rank, size, kH, kW,
+                                   &pad_top, &pad_bottom,
+                                   &pad_left, &pad_right);
+
+    *padded_local_H = *local_H + pad_top + pad_bottom;
+    *padded_local_W = *local_W + pad_left + pad_right;
+}
+
+// ===================================================================
+// End of Phase 2 Padding Utilities
+// ===================================================================
+
 void conv2d_stride_serial(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output) {
     // For "same" padding, the unpadded dimensions would be:
@@ -521,6 +583,8 @@ void initialize_matrix(float **matrix, int rows, int cols, float value) {
     }
 }
 
+
+// CAN BE REMOVED ??  
 void generate_padded_matrix(float **input, int height, int width,
                             int kernel_height, int kernel_width,
                             float ***padded, int *padded_height,

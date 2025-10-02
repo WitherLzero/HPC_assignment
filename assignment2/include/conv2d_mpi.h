@@ -98,6 +98,58 @@ void calculate_stride_output_dims(int input_H, int input_W, int stride_H, int st
                                   int *output_H, int *output_W);
 
 /**
+ * @brief Calculate padding requirements for a specific process in distributed computation
+ *
+ * Determines the padding needed for top/bottom/left/right based on process position:
+ * - First process (rank 0): Top gets "same" padding, bottom gets halo
+ * - Middle processes: Both top and bottom get halo padding
+ * - Last process: Top gets halo, bottom gets "same" padding
+ * - All processes: Left/right get "same" padding
+ *
+ * @param rank Process rank in communicator
+ * @param size Total number of processes in communicator
+ * @param kH Kernel height
+ * @param kW Kernel width
+ * @param pad_top Pointer to store top padding size
+ * @param pad_bottom Pointer to store bottom padding size
+ * @param pad_left Pointer to store left padding size
+ * @param pad_right Pointer to store right padding size
+ */
+void calculate_padding_for_process(
+    int rank, int size,
+    int kH, int kW,
+    int* pad_top, int* pad_bottom,
+    int* pad_left, int* pad_right
+);
+
+/**
+ * @brief Calculate local matrix dimensions for distributed computation
+ *
+ * Determines how many rows each process should handle and the dimensions
+ * of the local padded matrix including halo regions.
+ *
+ * @param rank Process rank in communicator
+ * @param size Total number of processes in communicator
+ * @param H_global Global matrix height (without padding)
+ * @param W_global Global matrix width (without padding)
+ * @param kH Kernel height (for padding calculation)
+ * @param kW Kernel width (for padding calculation)
+ * @param local_H Pointer to store local matrix height (without padding)
+ * @param local_W Pointer to store local matrix width (without padding)
+ * @param local_start_row Pointer to store starting row in global coordinates
+ * @param padded_local_H Pointer to store local matrix height (with padding)
+ * @param padded_local_W Pointer to store local matrix width (with padding)
+ */
+void calculate_local_dimensions(
+    int rank, int size,
+    int H_global, int W_global,
+    int kH, int kW,
+    int* local_H, int* local_W,
+    int* local_start_row,
+    int* padded_local_H, int* padded_local_W
+);
+
+/**
  * @brief Distribute input matrix across MPI processes with necessary overlap for convolution
  *
  * @param global_matrix Global input matrix (only valid on root)
@@ -200,6 +252,40 @@ int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float
 // Matrix generation functions with MPI support
 float **mpi_generate_random_matrix(int rows, int cols, float min_val,
                                    float max_val, MPI_Comm comm);
+
+/**
+ * @brief Generate local portion of padded matrix for distributed computation
+ *
+ * This function generates a local portion of a matrix with padding, suitable for
+ * distributed 2D convolution. Each process generates only its assigned rows plus
+ * necessary padding. Uses deterministic position-based seeding for reproducibility.
+ *
+ * @param H_global Global matrix height (without padding)
+ * @param W_global Global matrix width (without padding)
+ * @param kH Kernel height (for padding calculation)
+ * @param kW Kernel width (for padding calculation)
+ * @param padded_local_H Returned local matrix height (with padding)
+ * @param padded_local_W Returned local matrix width (with padding)
+ * @param local_start_row Starting row in global coordinates
+ * @param min_val Minimum random value (inclusive)
+ * @param max_val Maximum random value (exclusive)
+ * @param comm MPI communicator (typically active_comm)
+ *
+ * @return Allocated padded matrix with generated values
+ *
+ * @note Padding regions are initialized to zero. Use mpi_exchange_halos()
+ *       to fill with actual neighbor data.
+ * @note Uses deterministic seeding: same global matrix regardless of process count
+ */
+float** mpi_generate_local_padded_matrix(
+    int H_global, int W_global,
+    int kH, int kW,
+    int* padded_local_H,
+    int* padded_local_W,
+    int* local_start_row,
+    float min_val, float max_val,
+    MPI_Comm comm
+);
 
 /**
  * @brief Compare two matrices element-wise within an absolute tolerance (MPI-aware)
