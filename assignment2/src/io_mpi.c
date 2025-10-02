@@ -152,9 +152,9 @@ float **mpi_generate_random_matrix(int rows, int cols, float min_val,
     }
 
     // Broadcast the generated matrix to all processes
-    for (int i = 0; i < rows; i++) {
-        MPI_Bcast(matrix[i], cols, MPI_FLOAT, 0, comm);
-    }
+    // for (int i = 0; i < rows; i++) {
+    //     MPI_Bcast(matrix[i], cols, MPI_FLOAT, 0, comm);
+    // }
 
     return matrix;
 }

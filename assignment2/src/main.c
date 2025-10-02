@@ -214,24 +214,32 @@ int main(int argc, char *argv[]) {
         kernel_H = kernel_height;
         kernel_W = kernel_width;
 
+        // TODO: directly get padded matrix to save memory
         input = mpi_generate_random_matrix(input_H, input_W, 0.0f, 1.0f, MPI_COMM_WORLD);
-        kernel = mpi_generate_random_matrix(kernel_H, kernel_W, 0.0f, 1.0f, MPI_COMM_WORLD);
-
+        // only root process generates the kernel
+        if(rank == 0){ 
+            kernel = mpi_generate_random_matrix(kernel_H, kernel_W, 0.0f, 1.0f, MPI_COMM_WORLD);
+        }
         if (input == NULL || kernel == NULL) {
             if (rank == 0) fprintf(stderr, "Error generating matrices\n");
             if (input) free_matrix(input, input_H);
-            if (kernel) free_matrix(kernel, kernel_H);
+            if (rank == 0 && kernel) free_matrix(kernel, kernel_H);
             MPI_Finalize();
             exit(EXIT_FAILURE);
         }
 
         // Save generated matrices if file paths specified
+        // TODO: may need to extract from padded to normal input and save
+            //  move the write section to the end
+        // approach: 1. allocate new matrix and copy, then write
+                //   2. create a intelligent write function that can handle padded matrix
+                //                                          with correct size and format
         if (input_file) {
             mpi_write_matrix_to_file(input_file, input, input_H, input_W, MPI_COMM_WORLD);
             if (rank == 0 && verbose) printf("Generated input saved to %s\n", input_file);
         }
-        if (kernel_file) {
-            mpi_write_matrix_to_file(kernel_file, kernel, kernel_H, kernel_W, MPI_COMM_WORLD);
+        if (rank == 0 && kernel_file) {
+            write_matrix_to_file(kernel_file, kernel, kernel_H, kernel_W, MPI_COMM_WORLD);
             if (rank == 0 && verbose) printf("Generated kernel saved to %s\n", kernel_file);
         }
     } else if (has_input_files) {
@@ -242,11 +250,14 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        if (mpi_read_matrix_from_file(kernel_file, &kernel, &kernel_H, &kernel_W, MPI_COMM_WORLD) != 0) {
-            if (rank == 0) fprintf(stderr, "Error reading kernel file %s\n", kernel_file);
-            free_matrix(input, input_H);
-            MPI_Finalize();
-            exit(EXIT_FAILURE);
+        // only root process reads the kernel
+        if(rank == 0){        
+                if (mpi_read_matrix_from_file(kernel_file, &kernel, &kernel_H, &kernel_W, MPI_COMM_WORLD) != 0) {
+                if (rank == 0) fprintf(stderr, "Error reading kernel file %s\n", kernel_file);
+                free_matrix(input, input_H);
+                MPI_Finalize();
+                exit(EXIT_FAILURE);
+            }
         }
 
         if (rank == 0 && verbose) {

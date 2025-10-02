@@ -3,7 +3,7 @@
 #SBATCH --job-name=conv_test
 #SBATCH --output=conv.out
 #SBATCH --error=conv.err
-#SBATCH --cpus-per-task=48
+#SBATCH --cpus-per-task=64
 #SBATCH --partition=cits3402
 #SBATCH --time=01:10:00
 #SBATCH --mail-type=END,FAIL

@@ -191,6 +191,12 @@ int mpi_write_matrix_to_file(const char *filename, float **matrix, int rows,
                              int cols, MPI_Comm comm);
 void mpi_print_matrix(float **matrix, int rows, int cols, MPI_Comm comm);
 
+// Serial versions for testing without MPI
+int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int *cols);
+int write_matrix_to_file(const char *filename, float **matrix, int rows, int cols);
+void print_matrix(float **matrix, int rows, int cols);
+int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float tolerance);
+
 // Matrix generation functions with MPI support
 float **mpi_generate_random_matrix(int rows, int cols, float min_val,
                                    float max_val, MPI_Comm comm);

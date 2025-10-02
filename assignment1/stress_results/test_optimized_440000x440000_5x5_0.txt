@@ -1,0 +1,10 @@
+Matrix Size: 440000x440000
+Kernel Size: 5x5
+Mode: Parallel
+Wall clock time: 2532 seconds
+Program Execution time:2225 s
+Peak Memory: 1477162 MB (1442.54 GB)
+Start time: Thu 02 Oct 2025 10:57:06 AWST
+End time: Thu 02 Oct 2025 11:39:18 AWST
+
+== Error Output ==
