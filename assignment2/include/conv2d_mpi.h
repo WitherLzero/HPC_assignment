@@ -253,6 +253,8 @@ int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float
 float **mpi_generate_random_matrix(int rows, int cols, float min_val,
                                    float max_val, MPI_Comm comm);
 
+float **generate_random_matrix(int rows, int cols, float min_val, float max_val);
+
 /**
  * @brief Generate local portion of padded matrix for distributed computation
  *
