@@ -434,7 +434,6 @@ int main(int argc, char *argv[]) {
             printf("Read local padded input from file successfully\n");
         }
 
-
     }
 
     // ===================================================================
@@ -447,10 +446,6 @@ int main(int argc, char *argv[]) {
     int local_output_W = (padded_local_W - kernel_W + 1 + stride_W - 1) / stride_W;
     float **local_output = allocate_matrix(local_output_H, local_output_W);
 
-    // if (verbose) {
-    //     printf("DEBUG rank %d: ACTUAL padded_local_H=%d, local_output_H=%d\n",
-    //            rank, padded_local_H, local_output_H);
-    // }
 
     // Timing
     mpi_timer_t timer;
@@ -482,14 +477,6 @@ int main(int argc, char *argv[]) {
                              stride_H, stride_W, local_output, active_comm);
     }
 
-    // // DEBUG: Print local output after computation
-    // if (verbose) {
-    //     printf("\n=== DEBUG Rank %d: Local output (after computation) ===\n", rank);
-    //     printf("Dimensions: %d x %d\n", local_output_H, local_output_W);
-    //     if (local_output_H <= 10 && local_output_W <= 10) {
-    //         print_matrix(local_output, local_output_H, local_output_W);
-    //     }
-    // }
 
     if (time_execution || time_execution_seconds) {
         mpi_timer_end(&timer, active_comm);
@@ -542,24 +529,12 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // if (verbose) {
-        //     printf("DEBUG: Gathering - rank=%d, local_start_row=%d, output_start_row=%d, local_output_H=%d\n",
-        //            rank, local_start_row, output_start_row, local_output_H);
-        // }
 
         mpi_gather_output(local_output, local_output_H, local_output_W,
                           output_start_row,
                           &full_output, output_H, output_W,
                           active_comm);
 
-        // DEBUG: Print gathered output
-        // if (verbose && rank == 0) {
-        //     printf("\n=== DEBUG Rank 0: Full output (after gather) ===\n");
-        //     printf("Dimensions: %d x %d\n", output_H, output_W);
-        //     if (output_H <= 10 && output_W <= 10) {
-        //         print_matrix(full_output, output_H, output_W);
-        //     }
-        // }
     }
 
     // Handle verification mode

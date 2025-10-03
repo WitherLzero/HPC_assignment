@@ -86,11 +86,18 @@ This is a comprehensive implementation plan for refactoring Assignment 2's MPI i
 
 #### What's NOT Done Yet:
 - ~~Phase 4: Parallel file reading (MPI_File_read_at)~~ ✅ COMPLETED
-- **Phase 4+: Parallel INPUT file writing (bonus)** ✅ COMPLETED
+- ~~Phase 4+: Parallel INPUT file writing (bonus)~~ ✅ COMPLETED
 - Phase 5: Update convolution functions to use active_comm
 - Phase 6: Parallel OUTPUT file writing (MPI_File_write_at_all)
 - Phase 7: Conditional output gathering
 - Phase 8-10: Integration, performance testing, documentation
+
+#### Generate Mode Implementation:
+- **Comprehensive plan created**: See `GENERATE_MODE_IMPLEMENTATION_PLAN.md`
+- **Key insight**: Dual-path approach
+  - stride=1: Parallel generation (already working)
+  - stride>1: Root generation + distribution (ensures data consistency)
+- **Status**: Design complete, ready for implementation
 
 ### Session 2: Phase 4 & 4+ Implementation (Completed)
 
