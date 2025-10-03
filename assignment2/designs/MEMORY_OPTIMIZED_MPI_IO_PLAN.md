@@ -85,17 +85,94 @@ This is a comprehensive implementation plan for refactoring Assignment 2's MPI i
 - ✅ Multiple process counts (2, 3, 4)
 
 #### What's NOT Done Yet:
-- Phase 4: Parallel file reading (MPI_File_read_at)
+- ~~Phase 4: Parallel file reading (MPI_File_read_at)~~ ✅ COMPLETED
+- **Phase 4+: Parallel INPUT file writing (bonus)** ✅ COMPLETED
 - Phase 5: Update convolution functions to use active_comm
-- Phase 6: Parallel file writing (MPI_File_write_at_all)
+- Phase 6: Parallel OUTPUT file writing (MPI_File_write_at_all)
 - Phase 7: Conditional output gathering
 - Phase 8-10: Integration, performance testing, documentation
 
+### Session 2: Phase 4 & 4+ Implementation (Completed)
+
+**Date**: Current session (Oct 2)
+**Status**: ✅ Phase 4 and Phase 4+ (bonus) fully implemented and verified
+
+#### What We Completed:
+
+1. **Phase 4: Parallel File Reading** ✅
+   - Implemented `mpi_read_local_padded_matrix()` in `src/io_mpi.c`
+   - Each process reads only its local portion using `MPI_File_read_at()`
+   - Correctly handles text file format: `"0.xxx "` (6 chars per float)
+   - Last column format: `"0.xxx"` (5 chars, no trailing space)
+   - Handles Windows line endings (`\r\n` = 2 bytes)
+   - Allocates padded matrices with proper padding/halo regions
+   - Tested successfully with f0.txt (6×6), f2.txt (7×7), and multiple process counts
+
+2. **Phase 4+ (Bonus): Parallel INPUT File Writing** ✅
+   - Implemented `mpi_write_input_parallel()` in `src/io_mpi.c`
+   - Each process writes only its data portion (excluding padding/halo) directly to file
+   - Uses `MPI_File_write_at()` for parallel I/O
+   - Avoids memory waste of extracting padding, gathering to root, then writing
+   - Successfully tested: Generated matrices written to file and verified
+   - Round-trip verified: Write → Read → Compare successful
+
+#### Files Modified:
+- `src/io_mpi.c`:
+  - Added `mpi_read_local_padded_matrix()` function
+  - Added `mpi_write_input_parallel()` function
+  - Temporarily disabled OpenMP in `generate_random_matrix()` for debug stability
+- `include/conv2d_mpi.h`:
+  - Added `mpi_read_local_padded_matrix()` declaration
+  - Added `mpi_write_input_parallel()` declaration
+  - Added `generate_random_matrix()` declaration
+- `src/_main.c`:
+  - Integrated parallel file reading for input files
+  - Integrated parallel input writing when generating matrices
+  - Added debug sections for matrix inspection (DEBUG mode only)
+
+#### Key Design Decisions Made:
+
+1. **File Format Handling**:
+   - Correctly identified format: `"0.xxx "` = 6 chars per float (including decimal and space)
+   - Last column: `"0.xxx"` = 5 chars (no trailing space)
+   - Windows line endings: `\r\n` = 2 bytes per row
+   - Total bytes per row: `W*6 - 1 + 2 = W*6 + 1`
+
+2. **Parallel Input Writing Strategy**:
+   - Calculate padding for each process to identify data vs padding/halo regions
+   - Each process writes only `local_H × local_W` data portion (no padding/halo)
+   - Root writes header first, then all processes write their rows at calculated offsets
+   - Uses same file format as reading for consistency
+
+3. **Debug Mode Issue**:
+   - Segfault in DEBUG mode traced to OpenMP directives in `generate_random_matrix()`
+   - Temporarily disabled OpenMP parallelization in kernel generation for stability
+   - RELEASE mode works perfectly
+   - Debug prints added for verification (hangs on print_matrix in some cases)
+
+#### Testing Completed:
+- ✅ Read f0.txt (6×6) with 2 processes - all columns loaded correctly
+- ✅ Read f2.txt (7×7) with 2-3 processes - all columns loaded correctly
+- ✅ Different process counts (1, 2, 3, 4) produce correct results
+- ✅ Generate 6×6 matrix with 2 processes and write to file
+- ✅ Generate 10×10 matrix and write to file
+- ✅ File format matches expected format (verified manually)
+- ✅ Round-trip test: Generate → Write → Read → Verify successful
+
+#### Memory Savings Achieved:
+With Phase 4 complete, we now have:
+- **NO global matrix on root for input reading** ✅
+- Each process reads only its portion (~1/N of file size)
+- **NO global matrix on root for input writing** ✅ (bonus)
+- Each process writes only its portion directly
+
 #### Next Steps for Future Session:
-1. Implement Phase 4: `mpi_read_local_padded_matrix()` for parallel file I/O
-2. Update all convolution functions to accept `active_comm` parameter
-3. Implement Phase 6: `mpi_write_output_parallel()` for distributed output writing
-4. Test end-to-end workflow with computation
+1. **Fix debug mode segfault** (optional - re-enable OpenMP safely or investigate root cause)
+2. **Phase 5**: Update all convolution functions to accept `active_comm` parameter
+3. **Phase 6**: Implement `mpi_write_output_parallel()` for distributed OUTPUT writing
+4. **Phase 7**: Implement `mpi_gather_output_to_root()` for non-file scenarios
+5. **Phase 8**: End-to-end integration testing with actual computation
+6. **Phase 9-10**: Performance testing and documentation
 
 ---
 

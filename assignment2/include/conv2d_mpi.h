@@ -253,6 +253,9 @@ int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float
 float **mpi_generate_random_matrix(int rows, int cols, float min_val,
                                    float max_val, MPI_Comm comm);
 
+// Serial version for kernel generation
+float **generate_random_matrix(int rows, int cols, float min_val, float max_val);
+
 /**
  * @brief Generate local portion of padded matrix for distributed computation
  *
@@ -284,6 +287,71 @@ float** mpi_generate_local_padded_matrix(
     int* padded_local_W,
     int* local_start_row,
     float min_val, float max_val,
+    MPI_Comm comm
+);
+
+/**
+ * @brief Read local portion of padded matrix using MPI Parallel I/O
+ *
+ * Each process reads only its local portion from the file using MPI_File_read_at().
+ * The matrix is allocated with padding and initialized with zeros for padding regions.
+ * After reading, use mpi_exchange_halos() to fill halo regions with neighbor data.
+ *
+ * @param filename Input file path
+ * @param H_global Global matrix height (output parameter, read from file)
+ * @param W_global Global matrix width (output parameter, read from file)
+ * @param kH Kernel height (for padding calculation)
+ * @param kW Kernel width (for padding calculation)
+ * @param padded_local_H Local matrix height with padding (output)
+ * @param padded_local_W Local matrix width with padding (output)
+ * @param local_start_row Starting row in global coordinates (output)
+ * @param comm MPI communicator (typically active_comm)
+ *
+ * @return Allocated padded matrix with data read from file, NULL on error
+ *
+ * @note Padding regions are initialized to zero. Use mpi_exchange_halos()
+ *       to fill halo regions with actual neighbor data.
+ * @note Uses MPI Parallel I/O for efficient distributed reading
+ */
+float** mpi_read_local_padded_matrix(
+    const char* filename,
+    int* H_global, int* W_global,
+    int kH, int kW,
+    int* padded_local_H,
+    int* padded_local_W,
+    int* local_start_row,
+    MPI_Comm comm
+);
+
+/**
+ * @brief Write local padded input matrix to file using MPI Parallel I/O
+ *
+ * Each process writes only its data portion (excluding padding/halo) directly to the file.
+ * This avoids the wasteful approach of extracting padding, gathering to root, then writing.
+ *
+ * @param filename Output file path
+ * @param local_padded_matrix Local padded matrix
+ * @param padded_local_H Local matrix height (with padding)
+ * @param padded_local_W Local matrix width (with padding)
+ * @param local_start_row Starting row in global coordinates
+ * @param H_global Global matrix height (without padding)
+ * @param W_global Global matrix width (without padding)
+ * @param kH Kernel height (for padding calculation)
+ * @param kW Kernel width (for padding calculation)
+ * @param comm MPI communicator (typically active_comm)
+ *
+ * @return 0 on success, -1 on error
+ *
+ * @note Writes only the data portion, skipping padding/halo regions
+ * @note Uses MPI Parallel I/O for efficient distributed writing
+ */
+int mpi_write_input_parallel(
+    const char* filename,
+    float **local_padded_matrix,
+    int padded_local_H, int padded_local_W,
+    int local_start_row,
+    int H_global, int W_global,
+    int kH, int kW,
     MPI_Comm comm
 );
 

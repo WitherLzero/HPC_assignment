@@ -555,13 +555,6 @@ float **allocate_matrix(int rows, int cols) {
         }
     }
 
-#ifdef DEBUG
-    // Verify alignment in debug mode
-    printf("Matrix allocation: rows=%s, first_row=%s (%d x %d)\n",
-           is_cache_aligned(matrix) ? "aligned" : "unaligned",
-           is_cache_aligned(matrix[0]) ? "aligned" : "unaligned",
-           rows, cols);
-#endif
 
     return matrix;
 }

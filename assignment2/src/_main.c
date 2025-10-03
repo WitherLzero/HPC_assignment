@@ -217,10 +217,9 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // CHECK do we really need this? ALL PROCESSES can receive cli params 
     // If reading from file, we need to get dimensions first (root reads header)
     if (!has_generation && has_input_files) {
-        // TODO: Read dimensions from file header (will implement in Phase 4)
-        // For now, placeholder - will be replaced with parallel I/O header reading
         if (rank == 0) {
             // Read header only to get dimensions
             FILE *f = fopen(input_file, "r");
@@ -241,16 +240,15 @@ int main(int argc, char *argv[]) {
         MPI_Bcast(&kernel_W, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
 
+
+    
     // ===================================================================
-    // Calculate output dimensions (BEFORE creating active_comm)
+    // PHASE 1: CREATE ACTIVE_COMM 
     // ===================================================================
 
+    // Calculate output dimensions
     int output_H, output_W;
     calculate_stride_output_dims(input_H, input_W, stride_H, stride_W, &output_H, &output_W);
-
-    // ===================================================================
-    // CREATE ACTIVE_COMM (EARLY - Phase 1 Key Change!)
-    // ===================================================================
 
     // Determine optimal number of processes (limit to output rows)
     int optimal_processes = (size > output_H) ? output_H : size;
@@ -294,7 +292,6 @@ int main(int argc, char *argv[]) {
 
     // ===================================================================
     // PHASE 2: INPUT ACQUISITION (PARALLEL)
-    // TODO: Implement in later phases
     // ===================================================================
 
     float **local_padded_input = NULL, **kernel = NULL;
@@ -331,21 +328,67 @@ int main(int argc, char *argv[]) {
         // Broadcast kernel to all active processes
         mpi_broadcast_kernel(&kernel, kernel_H, kernel_W, active_comm);
 
+
+        // Save generated input to file using MPI Parallel I/O (if specified)
+        if (input_file) {
+            int write_result = mpi_write_input_parallel(
+                input_file,
+                local_padded_input,
+                padded_local_H, padded_local_W,
+                local_start_row,
+                input_H, input_W,
+                kernel_H, kernel_W,
+                active_comm
+            );
+
+
+            if (write_result == 0 && rank == 0 && verbose) {
+                printf("Generated input saved to %s\n", input_file);
+            }
+        }
+
+        // Save generated kernel to file (only on root)
+        if (rank == 0 && kernel_file) {
+            write_matrix_to_file(kernel_file, kernel, kernel_H, kernel_W);
+            if (verbose) printf("Generated kernel saved to %s\n", kernel_file);
+        }
+
         if (rank == 0 && verbose) {
             printf("Generated local padded input and kernel successfully\n");
         }
     } else if (has_input_files){
-        // TODO: Phase 4 - Parallel file reading
-        // local_padded_input = mpi_read_local_padded_matrix(
-        //     input_file, &input_H, &input_W,
-        //     kernel_H, kernel_W,
-        //     &padded_local_H, &padded_local_W, &local_start_row,
-        //     active_comm
-        // );
+        // Phase 4: Parallel file reading with MPI I/O
+        local_padded_input = mpi_read_local_padded_matrix(
+            input_file, &input_H, &input_W,
+            kernel_H, kernel_W,
+            &padded_local_H, &padded_local_W, &local_start_row,
+            active_comm
+        );
 
-        // TEMPORARY: Use old approach for now
+        if (local_padded_input == NULL) {
+            fprintf(stderr, "Rank %d: Failed to read local padded input from file\n", rank);
+            MPI_Comm_free(&active_comm);
+            MPI_Finalize();
+            exit(EXIT_FAILURE);
+        }
+
+        // Kernel handling (read on root, broadcast to all)
         if (rank == 0) {
-            fprintf(stderr, "TODO: Phase 4 - Parallel file reading not yet implemented\n");
+            read_matrix_from_file(kernel_file, &kernel, &kernel_H, &kernel_W);
+            if (kernel == NULL) {
+                fprintf(stderr, "Error: Failed to read kernel from file %s\n", kernel_file);
+                free_matrix(local_padded_input, padded_local_H);
+                MPI_Comm_free(&active_comm);
+                MPI_Finalize();
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // Broadcast kernel to all active processes
+        mpi_broadcast_kernel(&kernel, kernel_H, kernel_W, active_comm);
+
+        if (rank == 0 && verbose) {
+            printf("Read local padded input from file successfully\n");
         }
     }
 
@@ -378,6 +421,9 @@ int main(int argc, char *argv[]) {
 
     // Choose implementation
     // TODO: Update all conv functions to use active_comm parameter
+    // TODO: Add a conditional logic after the input parameters.
+        //   When use_serial or use_openmp_only is set, size must be 1. 
+        //Sometimes user forget to set -np 1
     if (use_serial && rank == 0) {
         // conv2d_stride_serial(local_padded_input, padded_local_H, padded_local_W,
         //                      kernel, kernel_H, kernel_W,
