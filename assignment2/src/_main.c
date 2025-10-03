@@ -217,6 +217,32 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Validate implementation mode vs process count
+    // Serial and OpenMP-only require exactly 1 MPI process
+    if ((use_serial || use_openmp_only) && size > 1) {
+        if (rank == 0) {
+            fprintf(stderr, "Error: Serial (-s) and OpenMP-only (-P) modes require exactly 1 MPI process\n");
+            fprintf(stderr, "       You launched with %d processes. Use: mpirun -np 1 ...\n", size);
+        }
+        MPI_Finalize();
+        exit(EXIT_FAILURE);
+    }
+
+    // Warn if conflicting implementation flags are set
+    int implementation_count = use_serial + use_mpi_only + use_openmp_only;
+    if (implementation_count > 1) {
+        if (rank == 0) {
+            fprintf(stderr, "Warning: Multiple implementation flags set (-s, -m, -P). Using priority: serial > openmp > mpi\n");
+        }
+        // Resolve conflicts with priority
+        if (use_serial) {
+            use_mpi_only = 0;
+            use_openmp_only = 0;
+        } else if (use_openmp_only) {
+            use_mpi_only = 0;
+        }
+    }
+
     // CHECK do we really need this? ALL PROCESSES can receive cli params 
     // If reading from file, we need to get dimensions first (root reads header)
     if (!has_generation && has_input_files) {
@@ -283,6 +309,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(active_comm, &rank);
     MPI_Comm_size(active_comm, &size);
 
+
     if (rank == 0 && verbose) {
         printf("Input dimensions: %d x %d\n", input_H, input_W);
         printf("Kernel dimensions: %d x %d\n", kernel_H, kernel_W);
@@ -300,7 +327,7 @@ int main(int argc, char *argv[]) {
     if (has_generation) {
         // Phase 3: Direct local padded matrix generation
         local_padded_input = mpi_generate_local_padded_matrix(
-            input_H, input_W, kernel_H, kernel_W,
+            input_H, input_W, kernel_H, kernel_W, stride_H, stride_W,
             &padded_local_H, &padded_local_W, &local_start_row,
             0.0f, 1.0f, active_comm
         );
@@ -310,6 +337,22 @@ int main(int argc, char *argv[]) {
             MPI_Comm_free(&active_comm);
             MPI_Finalize();
             exit(EXIT_FAILURE);
+        }
+
+        // DEBUG: Print local padded input after generating
+        if(verbose == 1)
+        {        
+            for (int p = 0; p < size; p++) {
+                if(rank == p) {
+                    printf("\n=== DEBUG Rank %d: Local padded input (generated) ===\n", rank);
+                    printf("Dimensions: %d x %d\n", padded_local_H, padded_local_W);
+                    if (padded_local_H <= 10 && padded_local_W <= 10) {
+                        print_matrix(local_padded_input, padded_local_H, padded_local_W);
+                    }
+                    fflush(stdout);
+                }
+                MPI_Barrier(active_comm);
+            }
         }
 
         // Kernel handling (generate on root, broadcast to all)
@@ -360,7 +403,7 @@ int main(int argc, char *argv[]) {
         // Phase 4: Parallel file reading with MPI I/O
         local_padded_input = mpi_read_local_padded_matrix(
             input_file, &input_H, &input_W,
-            kernel_H, kernel_W,
+            kernel_H, kernel_W, stride_H, stride_W,
             &padded_local_H, &padded_local_W, &local_start_row,
             active_comm
         );
@@ -390,28 +433,24 @@ int main(int argc, char *argv[]) {
         if (rank == 0 && verbose) {
             printf("Read local padded input from file successfully\n");
         }
-    }
 
-    // ===================================================================
-    // PHASE 3: HALO EXCHANGE
-    // TODO: Update to use active_comm
-    // ===================================================================
 
-    // Halo exchange
-    if (local_padded_input != NULL && size > 1) {
-        mpi_exchange_halos(local_padded_input, padded_local_H, padded_local_W,
-                           kernel_H, active_comm);
     }
 
     // ===================================================================
     // PHASE 4: COMPUTATION
-    // TODO: Update convolution functions to accept active_comm
+    // Halo exchange is now handled internally by MPI/Hybrid functions
     // ===================================================================
 
     // Allocate local output
     int local_output_H = (padded_local_H - kernel_H + 1 + stride_H - 1) / stride_H;
     int local_output_W = (padded_local_W - kernel_W + 1 + stride_W - 1) / stride_W;
     float **local_output = allocate_matrix(local_output_H, local_output_W);
+
+    // if (verbose) {
+    //     printf("DEBUG rank %d: ACTUAL padded_local_H=%d, local_output_H=%d\n",
+    //            rank, padded_local_H, local_output_H);
+    // }
 
     // Timing
     mpi_timer_t timer;
@@ -420,28 +459,37 @@ int main(int argc, char *argv[]) {
     }
 
     // Choose implementation
-    // TODO: Update all conv functions to use active_comm parameter
-    // TODO: Add a conditional logic after the input parameters.
-        //   When use_serial or use_openmp_only is set, size must be 1. 
-        //Sometimes user forget to set -np 1
-    if (use_serial && rank == 0) {
-        // conv2d_stride_serial(local_padded_input, padded_local_H, padded_local_W,
-        //                      kernel, kernel_H, kernel_W,
-        //                      stride_H, stride_W, local_output);
+    // Serial and OpenMP-only modes are validated to run with exactly 1 process
+    if (use_serial) {
+        // Serial mode: single-threaded, no MPI, no OpenMP
+        conv2d_stride_serial(local_padded_input, padded_local_H, padded_local_W,
+                             kernel, kernel_H, kernel_W,
+                             stride_H, stride_W, local_output);
+    } else if (use_openmp_only) {
+        // OpenMP-only mode: multi-threaded, no MPI
+        conv2d_stride_openmp(local_padded_input, padded_local_H, padded_local_W,
+                             kernel, kernel_H, kernel_W,
+                             stride_H, stride_W, local_output);
     } else if (use_mpi_only) {
-        // conv2d_stride_mpi(local_padded_input, padded_local_H, padded_local_W,
-        //                   kernel, kernel_H, kernel_W,
-        //                   stride_H, stride_W, local_output, active_comm);
-    } else if (use_openmp_only && rank == 0) {
-        // conv2d_stride_openmp(local_padded_input, padded_local_H, padded_local_W,
-        //                      kernel, kernel_H, kernel_W,
-        //                      stride_H, stride_W, local_output);
+        // MPI-only mode: distributed memory, no OpenMP within each process
+        conv2d_stride_mpi(local_padded_input, padded_local_H, padded_local_W,
+                          kernel, kernel_H, kernel_W,
+                          stride_H, stride_W, local_output, active_comm);
     } else {
-        // Default: hybrid
-        // conv2d_stride_hybrid(local_padded_input, padded_local_H, padded_local_W,
-        //                      kernel, kernel_H, kernel_W,
-        //                      stride_H, stride_W, local_output, active_comm);
+        // Default: hybrid mode (MPI + OpenMP)
+        conv2d_stride_hybrid(local_padded_input, padded_local_H, padded_local_W,
+                             kernel, kernel_H, kernel_W,
+                             stride_H, stride_W, local_output, active_comm);
     }
+
+    // // DEBUG: Print local output after computation
+    // if (verbose) {
+    //     printf("\n=== DEBUG Rank %d: Local output (after computation) ===\n", rank);
+    //     printf("Dimensions: %d x %d\n", local_output_H, local_output_W);
+    //     if (local_output_H <= 10 && local_output_W <= 10) {
+    //         print_matrix(local_output, local_output_H, local_output_W);
+    //     }
+    // }
 
     if (time_execution || time_execution_seconds) {
         mpi_timer_end(&timer, active_comm);
@@ -460,8 +508,86 @@ int main(int argc, char *argv[]) {
     // PHASE 5: OUTPUT HANDLING (CONDITIONAL)
     // ===================================================================
 
-    if (output_file) {
-        // OPTION A: Write to file using parallel I/O
+    float **full_output = NULL;
+
+    // Determine if we need the full output on root
+    // Cases: 1) Verify mode  2) No output file (verbose/display)  3) Single process (already have full)
+    bool need_full_output = (precision > 0) || (!output_file && verbose) || (size == 1);
+
+    if (size == 1) {
+        // Single process: local_output IS the full output
+        full_output = local_output;
+    } else if (need_full_output) {
+        // Multi-process: need to gather
+        // For stride > 1, calculate which global output rows this process produces
+        // based on its input start row
+
+        int output_start_row;
+
+        if (stride_H > 1 || stride_W > 1) {
+            // STRIDE-AWARE: Use OUTPUT-FIRST distribution for stride > 1
+            // Distribute output rows evenly across processes
+            int output_base_rows = output_H / size;
+            int output_remainder = output_H % size;
+            output_start_row = rank * output_base_rows + (rank < output_remainder ? rank : output_remainder);
+        } else {
+            // OUTPUT-FIRST: Distribute output rows evenly (original logic for stride=1)
+            int base_output_rows = output_H / size;
+            int output_remainder = output_H % size;
+
+            output_start_row = 0;
+            for (int p = 0; p < rank; p++) {
+                int p_local_output_H = base_output_rows + (p < output_remainder ? 1 : 0);
+                output_start_row += p_local_output_H;
+            }
+        }
+
+        // if (verbose) {
+        //     printf("DEBUG: Gathering - rank=%d, local_start_row=%d, output_start_row=%d, local_output_H=%d\n",
+        //            rank, local_start_row, output_start_row, local_output_H);
+        // }
+
+        mpi_gather_output(local_output, local_output_H, local_output_W,
+                          output_start_row,
+                          &full_output, output_H, output_W,
+                          active_comm);
+
+        // DEBUG: Print gathered output
+        // if (verbose && rank == 0) {
+        //     printf("\n=== DEBUG Rank 0: Full output (after gather) ===\n");
+        //     printf("Dimensions: %d x %d\n", output_H, output_W);
+        //     if (output_H <= 10 && output_W <= 10) {
+        //         print_matrix(full_output, output_H, output_W);
+        //     }
+        // }
+    }
+
+    // Handle verification mode
+    if (precision > 0 && output_file) {
+        // Verify mode: output_file is the EXPECTED file to compare against
+        if (rank == 0) {
+            float **expected = NULL;
+            int expected_H, expected_W;
+
+            if (read_matrix_from_file(output_file, &expected, &expected_H, &expected_W) == 0) {
+                if (expected_H == output_H && expected_W == output_W) {
+                    float tolerance = pow(10.0f, -precision);
+                    if (full_output != NULL && compare_matrices(full_output, expected, output_H, output_W, tolerance)) {
+                        printf("Verify Pass!\n");
+                    } else {
+                        printf("Verify Failed!\n");
+                    }
+                } else {
+                    printf("Verify Failed! Dimension mismatch: expected %dx%d, got %dx%d\n",
+                           expected_H, expected_W, output_H, output_W);
+                }
+                free_matrix(expected, expected_H);
+            } else {
+                printf("Error reading expected output file for verification\n");
+            }
+        }
+    } else if (output_file) {
+        // Write mode: save output to file
         // TODO: Phase 6 - Implement parallel output writing
         // mpi_write_output_parallel(output_file, local_output,
         //                           local_output_H, local_output_W,
@@ -473,37 +599,18 @@ int main(int argc, char *argv[]) {
         if (rank == 0 && verbose) {
             printf("TODO: Phase 6 - Parallel output writing not yet implemented\n");
         }
-    } else {
-        // OPTION B: No file → Gather for logical completeness
-        // TODO: Phase 7 - Implement gathering
-        float **full_output = NULL;
-
-        // mpi_gather_output_to_root(local_output, local_output_H, local_output_W,
-        //                           local_start_row,
-        //                           &full_output, output_H, output_W,
-        //                           active_comm);
-
-        if (rank == 0 && verbose) {
-            if (output_H <= 10 && output_W <= 10) {
-                // print_matrix(full_output, output_H, output_W);
-            } else {
-                printf("Result computed (%dx%d)\n", output_H, output_W);
-            }
-        }
-
-        // Cleanup full_output on root
-        if (rank == 0 && full_output != NULL) {
-            free_matrix(full_output, output_H);
+    } else if (rank == 0 && verbose && full_output != NULL) {
+        // No file, no verify: just display (verbose mode)
+        if (output_H <= 10 && output_W <= 10) {
+            print_matrix(full_output, output_H, output_W);
+        } else {
+            printf("Result computed (%dx%d)\n", output_H, output_W);
         }
     }
 
-    // Verification mode (if precision flag set)
-    if (rank == 0 && precision > 0 && output_file) {
-        // TODO: Implement verification logic
-        // float **expected = NULL;
-        // int exp_H, exp_W;
-        // read_matrix_from_file(output_file, &expected, &exp_H, &exp_W);
-        // ... verification ...
+    // Cleanup full_output (only if it was gathered, not if it's an alias to local_output)
+    if (full_output != NULL && full_output != local_output && rank == 0) {
+        free_matrix(full_output, output_H);
     }
 
     // ===================================================================

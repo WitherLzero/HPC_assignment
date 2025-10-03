@@ -164,6 +164,7 @@ float **mpi_generate_random_matrix(int rows, int cols, float min_val,
 float** mpi_generate_local_padded_matrix(
     int H_global, int W_global,
     int kH, int kW,
+    int sH, int sW,
     int* padded_local_H,
     int* padded_local_W,
     int* local_start_row,
@@ -176,9 +177,17 @@ float** mpi_generate_local_padded_matrix(
 
     // Calculate local dimensions and padding using Phase 2 utilities
     int local_H, local_W;
-    calculate_local_dimensions(rank, size, H_global, W_global, kH, kW,
-                               &local_H, &local_W, local_start_row,
-                               padded_local_H, padded_local_W);
+    // if (sH > 1 || sW > 1) {
+    //     // Use stride-aware version for stride > 1
+    //     calculate_local_dimensions_stride_aware(rank, size, H_global, W_global, kH, kW, sH, sW,
+    //                                              &local_H, &local_W, local_start_row,
+    //                                              padded_local_H, padded_local_W);
+    // } else {
+        // Use original version for stride = 1
+        calculate_local_dimensions(rank, size, H_global, W_global, kH, kW,
+                                   &local_H, &local_W, local_start_row,
+                                   padded_local_H, padded_local_W);
+    // }
 
     int pad_top, pad_bottom, pad_left, pad_right;
     calculate_padding_for_process(rank, size, kH, kW,
@@ -229,6 +238,7 @@ float** mpi_read_local_padded_matrix(
     const char* filename,
     int* H_global, int* W_global,
     int kH, int kW,
+    int sH, int sW,
     int* padded_local_H,
     int* padded_local_W,
     int* local_start_row,
@@ -267,17 +277,41 @@ float** mpi_read_local_padded_matrix(
 
     // Calculate local dimensions and padding
     int local_H, local_W;
-    calculate_local_dimensions(rank, size, *H_global, *W_global, kH, kW,
-                               &local_H, &local_W, local_start_row,
-                               padded_local_H, padded_local_W);
-
     int pad_top, pad_bottom, pad_left, pad_right;
-    calculate_padding_for_process(rank, size, kH, kW,
-                                   &pad_top, &pad_bottom,
-                                   &pad_left, &pad_right);
+
+    if (sH > 1 || sW > 1) {
+        // Use stride-aware version for stride > 1
+        calculate_local_dimensions_stride_aware(rank, size, *H_global, *W_global, kH, kW, sH, sW,
+                                                 &local_H, &local_W, local_start_row,
+                                                 padded_local_H, padded_local_W);
+
+        // For stride > 1: Calculate padding offset for placing file data in matrix
+        // Rank 0 needs top padding space, others don't
+        int halo_size = (kH - 1) / 2;
+
+        pad_top = (rank == 0) ? halo_size : 0;  // Offset for placing data in matrix
+        pad_bottom = 0;  // Bottom padding handled by matrix allocation size
+        pad_left = (kW - 1) / 2;
+        pad_right = kW - 1 - pad_left;
+    } else {
+        // Use original version for stride = 1
+        calculate_local_dimensions(rank, size, *H_global, *W_global, kH, kW,
+                                   &local_H, &local_W, local_start_row,
+                                   padded_local_H, padded_local_W);
+
+        // For stride = 1: use standard padding calculation
+        calculate_padding_for_process(rank, size, kH, kW,
+                                       &pad_top, &pad_bottom,
+                                       &pad_left, &pad_right);
+    }
 
     // Allocate and initialize padded matrix (all zeros)
     float **matrix = allocate_matrix(*padded_local_H, *padded_local_W);
+    // DEBUG : Output the local matrix size:
+    if(matrix != NULL){
+        printf("DEBUG: Rank %d allocated local padded matrix of size %d x %d (local_H=%d, local_W=%d, local_start_row=%d)\n",
+               rank, *padded_local_H, *padded_local_W, local_H, local_W,*local_start_row);
+    }
     if (matrix == NULL) {
         fprintf(stderr, "Error: Rank %d failed to allocate local padded matrix\n", rank);
         MPI_File_close(&fh);
@@ -540,6 +574,20 @@ int write_matrix_to_file(const char *filename, float **matrix, int rows, int col
     return 0;
 }
 
+int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float tolerance) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            if (fabs(matrix1[i][j] - matrix2[i][j]) > tolerance) {
+                printf("Mismatch at [%d][%d]: %.6f vs %.6f (diff: %.6f)\n",
+                       i, j, matrix1[i][j], matrix2[i][j],
+                       fabs(matrix1[i][j] - matrix2[i][j]));
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
+
 void print_matrix(float **matrix, int rows, int cols) {
     printf("Matrix (%dx%d):\n", rows, cols);
     for (int i = 0; i < rows; i++) {
@@ -581,18 +629,4 @@ float **generate_random_matrix(int rows, int cols, float min_val, float max_val)
     }
 
     return matrix;
-}
-
-int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float tolerance) {
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            if (fabs(matrix1[i][j] - matrix2[i][j]) > tolerance) {
-                printf("Mismatch at [%d][%d]: %.6f vs %.6f (diff: %.6f)\n",
-                       i, j, matrix1[i][j], matrix2[i][j],
-                       fabs(matrix1[i][j] - matrix2[i][j]));
-                return 0;
-            }
-        }
-    }
-    return 1;
 }

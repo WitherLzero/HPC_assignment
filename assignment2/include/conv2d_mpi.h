@@ -150,6 +150,37 @@ void calculate_local_dimensions(
 );
 
 /**
+ * @brief Calculate local matrix dimensions for distributed computation (stride-aware)
+ *
+ * Uses INPUT-FIRST distribution strategy: distributes input rows evenly across
+ * processes, then each process computes output based on stride parameters.
+ * This approach works correctly for both stride=1 and stride>1 cases.
+ *
+ * @param rank Process rank in communicator
+ * @param size Total number of processes in communicator
+ * @param H_global Global matrix height (without padding)
+ * @param W_global Global matrix width (without padding)
+ * @param kH Kernel height (for padding calculation)
+ * @param kW Kernel width (for padding calculation)
+ * @param sH Stride in height direction
+ * @param sW Stride in width direction
+ * @param local_H Pointer to store local matrix height (without padding)
+ * @param local_W Pointer to store local matrix width (without padding)
+ * @param local_start_row Pointer to store starting row in global coordinates
+ * @param padded_local_H Pointer to store local matrix height (with padding)
+ * @param padded_local_W Pointer to store local matrix width (with padding)
+ */
+void calculate_local_dimensions_stride_aware(
+    int rank, int size,
+    int H_global, int W_global,
+    int kH, int kW,
+    int sH, int sW,
+    int* local_H, int* local_W,
+    int* local_start_row,
+    int* padded_local_H, int* padded_local_W
+);
+
+/**
  * @brief Distribute input matrix across MPI processes with necessary overlap for convolution
  *
  * @param global_matrix Global input matrix (only valid on root)
@@ -248,7 +279,6 @@ int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int 
 int write_matrix_to_file(const char *filename, float **matrix, int rows, int cols);
 void print_matrix(float **matrix, int rows, int cols);
 int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float tolerance);
-
 // Matrix generation functions with MPI support
 float **mpi_generate_random_matrix(int rows, int cols, float min_val,
                                    float max_val, MPI_Comm comm);
@@ -283,6 +313,7 @@ float **generate_random_matrix(int rows, int cols, float min_val, float max_val)
 float** mpi_generate_local_padded_matrix(
     int H_global, int W_global,
     int kH, int kW,
+    int sH, int sW,
     int* padded_local_H,
     int* padded_local_W,
     int* local_start_row,
@@ -317,6 +348,7 @@ float** mpi_read_local_padded_matrix(
     const char* filename,
     int* H_global, int* W_global,
     int kH, int kW,
+    int sH, int sW,
     int* padded_local_H,
     int* padded_local_W,
     int* local_start_row,
