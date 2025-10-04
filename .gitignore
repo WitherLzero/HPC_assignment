@@ -82,3 +82,6 @@ assignment2/kaya_mpi_scaling.slurm
 assignment2/kaya_hybrid.slurm
 assignment2/kaya_build_test.slurm
 assignment2/build.err
+
+**/.cache/**
+**/compile_commands.json
