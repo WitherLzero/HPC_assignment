@@ -258,11 +258,7 @@ float** mpi_read_local_padded_matrix(
 
     // Allocate and initialize padded matrix (all zeros)
     float **matrix = allocate_matrix(*padded_local_H, *padded_local_W);
-    // DEBUG : Output the local matrix size:
-    if(matrix != NULL){
-        printf("DEBUG: Rank %d allocated local padded matrix of size %d x %d (local_H=%d, local_W=%d, local_start_row=%d)\n",
-               rank, *padded_local_H, *padded_local_W, local_H, local_W,*local_start_row);
-    }
+
     if (matrix == NULL) {
         fprintf(stderr, "Error: Rank %d failed to allocate local padded matrix\n", rank);
         MPI_File_close(&fh);
@@ -312,10 +308,6 @@ float** mpi_read_local_padded_matrix(
         MPI_File_read_at(fh, row_offset, row_buffer, chars_per_row,
                         MPI_CHAR, &status);
         row_buffer[chars_per_row] = '\0';  // Null-terminate
-
-        #ifdef DEBUG
-        printf("Rank %d: Row %d buffer [%d chars]: '%s'\n", rank, global_row, chars_per_row, row_buffer);
-        #endif
 
         // Parse row into matrix (skip padding columns)
         char *ptr = row_buffer;
@@ -475,7 +467,6 @@ int mpi_write_output_parallel(
     // Adaptive format based on value range:
     //   value < 10:   "%5.3f " -> "x.xxx " (e.g., "1.234 " = 6 chars)
     //   value < 100:  "%5.2f " -> "xx.xx " (e.g., "12.34 " = 6 chars)
-    //   value >= 100: "%5.1f " -> "xxx.x " (e.g., "123.4 " = 6 chars)
     // Last column: same format minus trailing space = 5 chars
     int chars_per_value = 6;
 
@@ -484,12 +475,6 @@ int mpi_write_output_parallel(
 
     // Strategy: Each process writes sequentially in rank order
     // Later processes will overwrite overlapping rows from earlier processes
-    // This ensures correct data at correct global row positions
-
-    // DEBUG: Print loop count for each process
-    printf("DEBUG WRITE: Rank %d will write %d rows starting at global row %d\n",
-           rank, local_output_H, local_output_start_row);
-    fflush(stdout);
 
     // Each process waits for its turn (rank 0 goes first, then 1, etc.)
     for (int p = 0; p < size; p++) {
@@ -531,8 +516,6 @@ int mpi_write_output_parallel(
                                  MPI_CHAR, MPI_STATUS_IGNORE);
             }
 
-            printf("DEBUG WRITE: Rank %d completed writing %d rows\n", rank, local_output_H);
-            fflush(stdout);
         }
 
         // All processes wait before next process writes
@@ -650,13 +633,12 @@ float **generate_random_matrix(int rows, int cols, float min_val, float max_val)
     const float scale = range * inv_max;
 
     // Use OpenMP for parallel generation
-    // TEMPORARILY DISABLED FOR DEBUG MODE STABILITY
-    // #pragma omp parallel
+    #pragma omp parallel
     {
         // Each thread gets its own random state
-        unsigned int seed = (unsigned int)(time(NULL) /* + omp_get_thread_num() * 12345 */);
+        unsigned int seed = (unsigned int)(time(NULL) + omp_get_thread_num() * 12345);
 
-        // #pragma omp for collapse(2) schedule(static)
+        #pragma omp for collapse(2) schedule(static)
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
                 // Generate random float between min_val and max_val using fast xorshift

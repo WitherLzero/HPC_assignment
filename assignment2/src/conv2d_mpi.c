@@ -466,13 +466,6 @@ void mpi_distribute_matrix_stride_aware(float **global_matrix, int global_H, int
     int my_output_rows = output_base_rows + (rank < output_remainder ? 1 : 0);
     int my_output_start = rank * output_base_rows + (rank < output_remainder ? rank : output_remainder);
 
-    // DEBUG: Print the above info in each process
-    if(rank == 0)
-        printf("Global output rows: %d (base %d + remainder %d)\n", global_output_H, output_base_rows, output_remainder);
-    
-    printf("Rank %d/%d: output rows %d starting at %d\n", rank, size, my_output_rows, my_output_start);
-
-    MPI_Barrier(comm);
 
     // Calculate required input rows for this output range
     int input_start = my_output_start * stride_H;
