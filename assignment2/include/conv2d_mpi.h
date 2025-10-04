@@ -6,6 +6,13 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+// ==================================================================
+// In conv2d_mpi.c: 
+// ==================================================================
+
+// ------------------------------------------------------------------
+//  --------- Convolution function declarations ---------------------
+
 /**
  * @brief Serial implementation of 2D convolution with stride
  *
@@ -51,38 +58,110 @@ void conv2d_5x5_stride_optimized_openmp(float **restrict f, int H, int W, float 
                                          int sH, int sW, float **restrict output);
 
 /**
- * @brief MPI distributed memory implementation of 2D convolution with stride
+ * @brief Memory-optimized MPI-only strided convolution
  *
- * @param f Input feature map (padded)
- * @param H Global input height
- * @param W Global input width
- * @param g Kernel matrix
- * @param kH Number of rows in kernel matrix
- * @param kW Number of columns in kernel matrix
- * @param sH Stride in height direction
- * @param sW Stride in width direction
- * @param output Local output matrix
- * @param comm MPI communicator
+ * This function performs strided convolution on LOCAL padded input data
+ * that has already been distributed/generated. It does NOT distribute or gather.
+ *
+ *
+ * @param f Local padded input matrix (includes padding/halo space)
+ * @param H Local padded input height
+ * @param W Local padded input width
+ * @param g Kernel matrix (already broadcasted)
+ * @param kH Kernel height
+ * @param kW Kernel width
+ * @param sH Vertical stride
+ * @param sW Horizontal stride
+ * @param output Local output matrix (pre-allocated)
+ * @param comm MPI communicator (typically active_comm)
  */
 void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                        int sH, int sW, float **restrict output, MPI_Comm comm);
 
 /**
- * @brief Hybrid MPI+OpenMP implementation of 2D convolution with stride
+ * @brief Memory-optimized Hybrid (MPI + OpenMP) strided convolution
  *
- * @param f Input feature map (padded)
- * @param H Global input height
- * @param W Global input width
- * @param g Kernel matrix
- * @param kH Number of rows in kernel matrix
- * @param kW Number of columns in kernel matrix
- * @param sH Stride in height direction
- * @param sW Stride in width direction
- * @param output Local output matrix
- * @param comm MPI communicator
+ * This function performs strided convolution on LOCAL padded input data
+ * using both MPI (distributed memory) and OpenMP (shared memory) parallelization.
+ *
+ *
+ * @param f Local padded input matrix (includes padding/halo space)
+ * @param H Local padded input height
+ * @param W Local padded input width
+ * @param g Kernel matrix (already broadcasted)
+ * @param kH Kernel height
+ * @param kW Kernel width
+ * @param sH Vertical stride
+ * @param sW Horizontal stride
+ * @param output Local output matrix (pre-allocated)
+ * @param comm MPI communicator (typically active_comm)
  */
 void conv2d_stride_hybrid(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output, MPI_Comm comm);
+
+// ----------------------------------------------------------------
+// -------------------- MPI Communication  ------------------------
+
+/**
+ * @brief Broadcast kernel matrix to all MPI processes
+ *
+ * @param kernel Kernel matrix
+ * @param kernel_H Kernel height
+ * @param kernel_W Kernel width
+ * @param comm MPI communicator
+ */
+void mpi_broadcast_kernel(float ***kernel, int kernel_H, int kernel_W, MPI_Comm comm);
+
+/**
+ * @brief Exchange halo regions between neighboring MPI processes
+ *
+ * @param local_matrix Local matrix with halo regions
+ * @param local_H Local matrix height (including halos)
+ * @param local_W Local matrix width
+ * @param kernel_H Kernel height (determines halo size)
+ * @param comm MPI communicator
+ */
+void mpi_exchange_halos(float **local_matrix, int local_H, int local_W,
+                       int kernel_H, MPI_Comm comm);
+
+/**
+ * @brief Stride-aware distribution of input matrix across MPI processes
+ *
+ * @param global_matrix Global input matrix (only valid on root)
+ * @param global_H Global matrix height
+ * @param global_W Global matrix width
+ * @param kernel_H Kernel height (for overlap calculation)
+ * @param kernel_W Kernel width (for overlap calculation)
+ * @param stride_H Stride in height direction
+ * @param stride_W Stride in width direction
+ * @param local_matrix Pointer to store local matrix portion
+ * @param local_H Pointer to store local matrix height
+ * @param local_W Pointer to store local matrix width
+ * @param local_start_row Pointer to store starting row in global coordinates
+ * @param comm MPI communicator
+ */
+void mpi_distribute_matrix_stride_aware(float **global_matrix, int global_H, int global_W,
+                                        int kernel_H, int kernel_W, int stride_H, int stride_W,
+                                        float ***local_matrix, int *local_H, int *local_W,
+                                        int *local_start_row, MPI_Comm comm);
+/**
+ * @brief Gather output matrices from all MPI processes
+ *
+ * @param local_output Local output matrix
+ * @param local_output_H Local output height
+ * @param local_output_W Local output width
+ * @param local_start_row Starting row in global output coordinates
+ * @param global_output Pointer to store global output matrix (valid on root)
+ * @param global_output_H Global output height
+ * @param global_output_W Global output width
+ * @param comm MPI communicator
+ */
+void mpi_gather_output(float **local_output, int local_output_H, int local_output_W,
+                       int local_start_row, float ***global_output,
+                       int global_output_H, int global_output_W, MPI_Comm comm);
+
+// ----------------------------------------------------------------
+// --------------------- Helper Functions  ------------------------
 
 /**
  * @brief Calculate output dimensions for strided convolution
@@ -180,111 +259,26 @@ void calculate_local_dimensions_stride_aware(
     int* padded_local_H, int* padded_local_W
 );
 
-/**
- * @brief Distribute input matrix across MPI processes with necessary overlap for convolution
- *
- * @param global_matrix Global input matrix (only valid on root)
- * @param global_H Global matrix height
- * @param global_W Global matrix width
- * @param kernel_H Kernel height (for overlap calculation)
- * @param kernel_W Kernel width (for overlap calculation)
- * @param local_matrix Pointer to store local matrix portion
- * @param local_H Pointer to store local matrix height
- * @param local_W Pointer to store local matrix width
- * @param local_start_row Pointer to store starting row in global coordinates
- * @param comm MPI communicator
- */
-void mpi_distribute_matrix(float **global_matrix, int global_H, int global_W,
-                           int kernel_H, int kernel_W,
-                           float ***local_matrix, int *local_H, int *local_W,
-                           int *local_start_row, MPI_Comm comm);
 
-/**
- * @brief Stride-aware distribution of input matrix across MPI processes
- *
- * @param global_matrix Global input matrix (only valid on root)
- * @param global_H Global matrix height
- * @param global_W Global matrix width
- * @param kernel_H Kernel height (for overlap calculation)
- * @param kernel_W Kernel width (for overlap calculation)
- * @param stride_H Stride in height direction
- * @param stride_W Stride in width direction
- * @param local_matrix Pointer to store local matrix portion
- * @param local_H Pointer to store local matrix height
- * @param local_W Pointer to store local matrix width
- * @param local_start_row Pointer to store starting row in global coordinates
- * @param comm MPI communicator
- */
-void mpi_distribute_matrix_stride_aware(float **global_matrix, int global_H, int global_W,
-                                        int kernel_H, int kernel_W, int stride_H, int stride_W,
-                                        float ***local_matrix, int *local_H, int *local_W,
-                                        int *local_start_row, MPI_Comm comm);
+// ----------------------------------------------------------------
+// --------------------- Matrix Utility ---------------------------
 
-/**
- * @brief Gather output matrices from all MPI processes
- *
- * @param local_output Local output matrix
- * @param local_output_H Local output height
- * @param local_output_W Local output width
- * @param local_start_row Starting row in global output coordinates
- * @param global_output Pointer to store global output matrix (valid on root)
- * @param global_output_H Global output height
- * @param global_output_W Global output width
- * @param comm MPI communicator
- */
-void mpi_gather_output(float **local_output, int local_output_H, int local_output_W,
-                       int local_start_row, float ***global_output,
-                       int global_output_H, int global_output_W, MPI_Comm comm);
-
-/**
- * @brief Broadcast kernel matrix to all MPI processes
- *
- * @param kernel Kernel matrix
- * @param kernel_H Kernel height
- * @param kernel_W Kernel width
- * @param comm MPI communicator
- */
-void mpi_broadcast_kernel(float ***kernel, int kernel_H, int kernel_W, MPI_Comm comm);
-
-/**
- * @brief Exchange halo regions between neighboring MPI processes
- *
- * @param local_matrix Local matrix with halo regions
- * @param local_H Local matrix height (including halos)
- * @param local_W Local matrix width
- * @param kernel_H Kernel height (determines halo size)
- * @param comm MPI communicator
- */
-void mpi_exchange_halos(float **local_matrix, int local_H, int local_W,
-                       int kernel_H, MPI_Comm comm);
-
-// Matrix utility functions (reused from assignment1)
 float **allocate_matrix(int rows, int cols);
+
 void free_matrix(float **matrix, int rows);
+
 void initialize_matrix(float **matrix, int rows, int cols, float value);
-void generate_padded_matrix(float **input, int height, int width,
-                            int kernel_height, int kernel_width,
-                            float ***padded, int *padded_height,
-                            int *padded_width);
 
-// Matrix I/O functions with MPI support
-int mpi_read_matrix_from_file(const char *filename, float ***matrix, int *rows,
-                              int *cols, MPI_Comm comm);
-int mpi_write_matrix_to_file(const char *filename, float **matrix, int rows,
-                             int cols, MPI_Comm comm);
-void mpi_print_matrix(float **matrix, int rows, int cols, MPI_Comm comm);
-
-// Serial versions for testing without MPI
+// Serial versions for kernel
 int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int *cols);
+
 int write_matrix_to_file(const char *filename, float **matrix, int rows, int cols);
+
+float **generate_random_matrix(int rows, int cols, float min_val, float max_val);
+
 void print_matrix(float **matrix, int rows, int cols);
 int compare_matrices(float **matrix1, float **matrix2, int rows, int cols, float tolerance);
-// Matrix generation functions with MPI support
-float **mpi_generate_random_matrix(int rows, int cols, float min_val,
-                                   float max_val, MPI_Comm comm);
 
-// Serial version for kernel generation
-float **generate_random_matrix(int rows, int cols, float min_val, float max_val);
 
 /**
  * @brief Generate local portion of padded matrix for distributed computation
@@ -388,20 +382,98 @@ int mpi_write_input_parallel(
 );
 
 /**
- * @brief Compare two matrices element-wise within an absolute tolerance (MPI-aware)
+ * @brief Write local output portion to file using MPI Parallel I/O
  *
- * @param matrix1 Pointer to the first matrix (size rows x cols)
- * @param matrix2 Pointer to the second matrix (size rows x cols)
- * @param rows Number of rows in both matrices
- * @param cols Number of columns in both matrices
- * @param tolerance Maximum allowed absolute difference per element
+ * Each process writes its local output rows directly to the file at the
+ * correct offset. Uses collective I/O for optimal performance.
+ *
+ * @param filename Output file path
+ * @param local_output Local output matrix (no padding)
+ * @param local_output_H Local output height
+ * @param local_output_W Local output width (same as global width)
+ * @param local_output_start_row Starting row in global output
+ * @param output_H_global Global output height
+ * @param output_W_global Global output width
+ * @param kH Kernel height (for format width calculation)
+ * @param kW Kernel width (for format width calculation)
  * @param comm MPI communicator
- * @return int 1 if matrices are equal within tolerance, 0 otherwise
+ * @return 0 on success, -1 on failure
+ *
+ * @note Output format is always 6 chars per float (including space):
+ *       - value < 10:  "x.xxx " (3 decimal places)
+ *       - value >= 10: "xx.xx " (2 decimal places)
+ * @note Uses MPI_File_write_at_all() for collective I/O
  */
-int mpi_compare_matrices(float **matrix1, float **matrix2, int rows, int cols,
-                         float tolerance, MPI_Comm comm);
+int mpi_write_output_parallel(
+    const char* filename,
+    float **local_output,
+    int local_output_H,
+    int local_output_W,
+    int local_output_start_row,
+    int output_H_global,
+    int output_W_global,
+    int kH,
+    int kW,
+    MPI_Comm comm
+);
 
-// Timing utilities for MPI
+/**
+ * @brief Generate random matrix directly into padded format (memory efficient)
+ *
+ * For stride>1 generate mode: Root generates global padded matrix in single allocation.
+ * 50% memory savings vs two-step allocation (original matrix + padding).
+ *
+ * @param height Original matrix height (without padding)
+ * @param width Original matrix width (without padding)
+ * @param kernel_height Kernel height (for padding calculation)
+ * @param kernel_width Kernel width (for padding calculation)
+ * @param min_val Minimum random value (inclusive)
+ * @param max_val Maximum random value (exclusive)
+ * @param padded_height Output: total height including padding
+ * @param padded_width Output: total width including padding
+ * @return Allocated padded matrix with random data in center, zero padding
+ *
+ * @note Uses OpenMP for parallel generation
+ * @note Padding regions are initialized to zero
+ * @note Uses xorshift32 PRNG with thread-local seeding
+ */
+float** generate_random_matrix_into_padded(
+    int height, int width,
+    int kernel_height, int kernel_width,
+    float min_val, float max_val,
+    int* padded_height, int* padded_width
+);
+
+/**
+ * @brief Write unpadded data from padded matrix to file (smart extraction)
+ *
+ * Extracts and writes only the data region (excluding padding) on-the-fly.
+ * Used in PATH B (stride>1) to write the global matrix generated by root.
+ *
+ * @param padded_matrix Padded matrix to write
+ * @param padded_H Total height including padding
+ * @param padded_W Total width including padding
+ * @param original_H Original height without padding
+ * @param original_W Original width without padding
+ * @param kH Kernel height (for padding calculation)
+ * @param kW Kernel width (for padding calculation)
+ * @param filename Output file path
+ * @return 0 on success, -1 on failure
+ *
+ * @note No intermediate buffer allocation
+ * @note Output format: "%.3f " for all values, "\r\n" line ending
+ */
+int write_padded_matrix_to_file(
+    float **padded_matrix,
+    int padded_H, int padded_W,
+    int original_H, int original_W,
+    int kH, int kW,
+    const char* filename
+);
+
+// ----------------------------------------------------------------
+// --------------------- Timing utilities -------------------------
+
 typedef struct {
     double start_time;
     double end_time;
@@ -413,6 +485,5 @@ typedef struct {
 
 void mpi_timer_start(mpi_timer_t *timer);
 void mpi_timer_end(mpi_timer_t *timer, MPI_Comm comm);
-void mpi_timer_print(mpi_timer_t *timer, const char *description, MPI_Comm comm);
 
 #endif  // CONV2D_MPI_H

@@ -12,7 +12,7 @@ INCLUDE_DIR = include
 BUILD_DIR = build
 
 # Source files
-SOURCES = $(SRC_DIR)/_main.c $(SRC_DIR)/conv2d_mpi.c $(SRC_DIR)/io_mpi.c
+SOURCES = $(SRC_DIR)/main.c $(SRC_DIR)/conv2d_mpi.c $(SRC_DIR)/io_mpi.c
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 

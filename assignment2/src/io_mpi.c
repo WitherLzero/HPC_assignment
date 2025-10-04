@@ -5,109 +5,6 @@
 #include <limits.h>
 #include <math.h>
 
-// CAN BE REMOVED ??
-int mpi_read_matrix_from_file(const char *filename, float ***matrix, int *rows,
-                              int *cols, MPI_Comm comm) {
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    if (rank == 0) {
-        // Only root process reads the file
-        FILE *file = fopen(filename, "r");
-        if (file == NULL) {
-            fprintf(stderr, "Error: Cannot open file %s\n", filename);
-            return -1;
-        }
-
-        if (fscanf(file, "%d %d", rows, cols) != 2) {
-            fprintf(stderr, "Error: Invalid file format in %s\n", filename);
-            fclose(file);
-            return -1;
-        }
-
-        *matrix = allocate_matrix(*rows, *cols);
-        if (*matrix == NULL) {
-            fprintf(stderr, "Error: Cannot allocate matrix\n");
-            fclose(file);
-            return -1;
-        }
-
-        for (int i = 0; i < *rows; i++) {
-            for (int j = 0; j < *cols; j++) {
-                if (fscanf(file, "%f", &((*matrix)[i][j])) != 1) {
-                    fprintf(stderr, "Error: Cannot read matrix element [%d][%d]\n", i, j);
-                    free_matrix(*matrix, *rows);
-                    fclose(file);
-                    return -1;
-                }
-            }
-        }
-        fclose(file);
-    }
-
-    // Broadcast dimensions to all processes
-    MPI_Bcast(rows, 1, MPI_INT, 0, comm);
-    MPI_Bcast(cols, 1, MPI_INT, 0, comm);
-
-    // Non-root processes allocate matrix
-    if (rank != 0) {
-        *matrix = allocate_matrix(*rows, *cols);
-    }
-
-    // Broadcast matrix data
-    for (int i = 0; i < *rows; i++) {
-        MPI_Bcast((*matrix)[i], *cols, MPI_FLOAT, 0, comm);
-    }
-
-    return 0;
-}
-
-// CAN BE REMOVED ??
-int mpi_write_matrix_to_file(const char *filename, float **matrix, int rows,
-                             int cols, MPI_Comm comm) {
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    if (rank == 0) {
-        // Only root process writes the file
-        FILE *file = fopen(filename, "w");
-        if (file == NULL) {
-            fprintf(stderr, "Error: Cannot create file %s\n", filename);
-            return -1;
-        }
-
-        fprintf(file, "%d %d\n", rows, cols);
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                fprintf(file, "%.3f", matrix[i][j]);
-                if (j < cols - 1) fprintf(file, " ");
-            }
-            fprintf(file, "\n");
-        }
-        fclose(file);
-    }
-
-    return 0;
-}
-
-// CAN BE REMOVED ??
-void mpi_print_matrix(float **matrix, int rows, int cols, MPI_Comm comm) {
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    if (rank == 0) {
-        // Only root process prints
-        printf("Matrix (%dx%d):\n", rows, cols);
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                printf("%.3f", matrix[i][j]);
-                if (j < cols - 1) printf(" ");
-            }
-            printf("\n");
-        }
-        printf("\n");
-    }
-}
 
 // Fast random number generator using xorshift algorithm
 static inline unsigned int xorshift32(unsigned int *state) {
@@ -119,42 +16,104 @@ static inline unsigned int xorshift32(unsigned int *state) {
     return x;
 }
 
-// CAN BE REMOVED ??? 
-float **mpi_generate_random_matrix(int rows, int cols, float min_val,
-                                   float max_val, MPI_Comm comm) {
-    int rank;
-    MPI_Comm_rank(comm, &rank);
+// ===================================================================
+// Generate Mode Helper Functions (for stride > 1)
+// ===================================================================
 
-    float **matrix = allocate_matrix(rows, cols);
-    if (matrix == NULL) {
+/**
+ * @brief Generate random matrix directly into padded format (MEMORY EFFICIENT)
+ *
+ * Generates data directly into center of padded matrix - NO intermediate allocation!
+ * This is adapted from assignment1's proven approach.
+ */
+float** generate_random_matrix_into_padded(
+    int height, int width,
+    int kernel_height, int kernel_width,
+    float min_val, float max_val,
+    int* padded_height, int* padded_width
+) {
+    // Calculate padding (same padding)
+    int pad_top = (kernel_height - 1) / 2;
+    int pad_left = (kernel_width - 1) / 2;
+    int pad_bottom = kernel_height - 1 - pad_top;
+    int pad_right = kernel_width - 1 - pad_left;
+
+    *padded_height = height + pad_top + pad_bottom;
+    *padded_width = width + pad_left + pad_right;
+
+    // Allocate padded matrix directly
+    float **padded = allocate_matrix(*padded_height, *padded_width);
+    if (padded == NULL) {
         return NULL;
     }
+    initialize_matrix(padded, *padded_height, *padded_width, 0.0f);
 
-    if (rank == 0) {
-        // Only root process generates random values using optimized approach
-        // Pre-calculate range for efficiency
-        const float range = max_val - min_val;
-        const float inv_max = 1.0f / (float)UINT_MAX;
-        const float scale = range * inv_max;
+    // Pre-calculate for efficiency
+    const float range = max_val - min_val;
+    const float inv_max = 1.0f / (float)UINT_MAX;
+    const float scale = range * inv_max;
 
-        // Use OpenMP for parallel generation
-        #pragma omp parallel
-        {
-            // Each thread gets its own random state
-            unsigned int seed = (unsigned int)(time(NULL) + omp_get_thread_num() * 12345);
+    // Generate directly into center of padded matrix
+    #pragma omp parallel
+    {
+        unsigned int seed = (unsigned int)(time(NULL) + omp_get_thread_num() * 12345);
 
-            #pragma omp for collapse(2) schedule(static)
-            for (int i = 0; i < rows; i++) {
-                for (int j = 0; j < cols; j++) {
-                    // Generate random float between min_val and max_val using fast xorshift
-                    unsigned int rand_int = xorshift32(&seed);
-                    matrix[i][j] = ((float)rand_int * scale) + min_val;
-                }
+        #pragma omp for collapse(2) schedule(static)
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                unsigned int rand_int = xorshift32(&seed);
+                padded[i + pad_top][j + pad_left] = ((float)rand_int * scale) + min_val;
             }
         }
     }
 
-    return matrix;
+    return padded;
+}
+
+/**
+ * @brief Write unpadded data from padded matrix to file (SMART EXTRACTION)
+ *
+ * Extracts original data region from padded matrix and writes to file.
+ * Avoids creating intermediate unpadded matrix - writes on-the-fly.
+ */
+int write_padded_matrix_to_file(
+    float **padded_matrix,
+    int padded_H, int padded_W,
+    int original_H, int original_W,
+    int kH, int kW,
+    const char* filename
+) {
+    FILE *fp = fopen(filename, "w");
+    if (!fp) {
+        fprintf(stderr, "Error: Cannot open %s for writing\n", filename);
+        return -1;
+    }
+
+    // Write header (original dimensions)
+    fprintf(fp, "%d %d\r\n", original_H, original_W);
+
+    // Calculate padding offsets
+    int pad_top = (kH - 1) / 2;
+    int pad_left = (kW - 1) / 2;
+
+    // Write only the data region (skip padding)
+    for (int i = 0; i < original_H; i++) {
+        int padded_row = i + pad_top;
+
+        for (int j = 0; j < original_W; j++) {
+            int padded_col = j + pad_left;
+            float value = padded_matrix[padded_row][padded_col];
+
+            if (j < original_W - 1) {
+                fprintf(fp, "%.3f ", value);  // Space after value
+            } else {
+                fprintf(fp, "%.3f\r\n", value);  // Newline for last column
+            }
+        }
+    }
+
+    fclose(fp);
+    return 0;
 }
 
 // ===================================================================
@@ -177,17 +136,9 @@ float** mpi_generate_local_padded_matrix(
 
     // Calculate local dimensions and padding using Phase 2 utilities
     int local_H, local_W;
-    // if (sH > 1 || sW > 1) {
-    //     // Use stride-aware version for stride > 1
-    //     calculate_local_dimensions_stride_aware(rank, size, H_global, W_global, kH, kW, sH, sW,
-    //                                              &local_H, &local_W, local_start_row,
-    //                                              padded_local_H, padded_local_W);
-    // } else {
-        // Use original version for stride = 1
-        calculate_local_dimensions(rank, size, H_global, W_global, kH, kW,
+    calculate_local_dimensions(rank, size, H_global, W_global, kH, kW,
                                    &local_H, &local_W, local_start_row,
                                    padded_local_H, padded_local_W);
-    // }
 
     int pad_top, pad_bottom, pad_left, pad_right;
     calculate_padding_for_process(rank, size, kH, kW,
@@ -209,13 +160,13 @@ float** mpi_generate_local_padded_matrix(
     const float inv_max = 1.0f / (float)UINT_MAX;
     const float scale = range * inv_max;
 
-    //#pragma omp parallel
+    #pragma omp parallel
     {
         // Each thread gets its own random seed
-        unsigned int seed = (unsigned int)(time(NULL) + rank * 12345);
-                                       // + omp_get_thread_num() * 67890);
+        unsigned int seed = (unsigned int)(time(NULL) + rank * 12345
+                                        + omp_get_thread_num() * 67890);
 
-        //#pragma omp for collapse(2) schedule(static)
+        #pragma omp for collapse(2) schedule(static)
         for (int i = 0; i < local_H; i++) {
             for (int j = 0; j < local_W; j++) {
                 // Generate random float using xorshift32
@@ -480,40 +431,127 @@ int mpi_write_input_parallel(
 }
 
 
-// CAN BE REMOVED ??
-int mpi_compare_matrices(float **matrix1, float **matrix2, int rows, int cols,
-                         float tolerance, MPI_Comm comm) {
-    int rank;
+int mpi_write_output_parallel(
+    const char* filename,
+    float **local_output,
+    int local_output_H,
+    int local_output_W,
+    int local_output_start_row,
+    int output_H_global,
+    int output_W_global,
+    int kH,
+    int kW,
+    MPI_Comm comm
+) {
+    int rank, size;
     MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &size);
 
-    int local_match = 1;
-
-    // Each process checks the matrices (they should be identical on all processes)
-    for (int i = 0; i < rows && local_match; i++) {
-        for (int j = 0; j < cols && local_match; j++) {
-            if (fabs(matrix1[i][j] - matrix2[i][j]) > tolerance) {
-                if (rank == 0) {
-                    printf("Mismatch at [%d][%d]: %.6f vs %.6f (diff: %.6f)\n",
-                           i, j, matrix1[i][j], matrix2[i][j],
-                           fabs(matrix1[i][j] - matrix2[i][j]));
-                }
-                local_match = 0;
-            }
+    // Open file for writing
+    MPI_File fh;
+    int result = MPI_File_open(comm, filename,
+                              MPI_MODE_CREATE | MPI_MODE_WRONLY,
+                              MPI_INFO_NULL, &fh);
+    if (result != MPI_SUCCESS) {
+        if (rank == 0) {
+            fprintf(stderr, "Error: Cannot open file %s for writing\n", filename);
         }
+        return -1;
     }
 
-    // Collect results from all processes
-    int global_match;
-    MPI_Allreduce(&local_match, &global_match, 1, MPI_INT, MPI_LAND, comm);
+    // Root writes header
+    MPI_Offset header_size = 0;
+    if (rank == 0) {
+        char header[256];
+        int len = sprintf(header, "%d %d\r\n", output_H_global, output_W_global);
+        MPI_File_write(fh, header, len, MPI_CHAR, MPI_STATUS_IGNORE);
+        header_size = len;
+    }
+    MPI_Bcast(&header_size, 1, MPI_OFFSET, 0, comm);
 
-    return global_match;
+    MPI_Barrier(comm);  // Ensure header is written
+
+    // FIXED-WIDTH formatting: Always exactly 6 chars per value (including space)
+    // Adaptive format based on value range:
+    //   value < 10:   "%5.3f " -> "x.xxx " (e.g., "1.234 " = 6 chars)
+    //   value < 100:  "%5.2f " -> "xx.xx " (e.g., "12.34 " = 6 chars)
+    //   value >= 100: "%5.1f " -> "xxx.x " (e.g., "123.4 " = 6 chars)
+    // Last column: same format minus trailing space = 5 chars
+    int chars_per_value = 6;
+
+    // Total chars per row: (W-1)*6 + 5 + 2 = W*6 + 1
+    int chars_per_row = output_W_global * chars_per_value + 1;  // Include \r\n
+
+    // Strategy: Each process writes sequentially in rank order
+    // Later processes will overwrite overlapping rows from earlier processes
+    // This ensures correct data at correct global row positions
+
+    // DEBUG: Print loop count for each process
+    printf("DEBUG WRITE: Rank %d will write %d rows starting at global row %d\n",
+           rank, local_output_H, local_output_start_row);
+    fflush(stdout);
+
+    // Each process waits for its turn (rank 0 goes first, then 1, etc.)
+    for (int p = 0; p < size; p++) {
+        if (p == rank) {
+            // This process's turn to write
+            for (int i = 0; i < local_output_H; i++) {
+                int global_row = local_output_start_row + i;
+                MPI_Offset row_offset = header_size + global_row * chars_per_row;
+
+                char row_buffer[100000];
+                int pos = 0;
+
+                for (int j = 0; j < local_output_W; j++) {
+                    float value = local_output[i][j];
+
+                    if (j < local_output_W - 1) {
+                        // All but last column: adaptive format with trailing space (6 chars)
+                        if (value < 10.0f) {
+                            pos += sprintf(&row_buffer[pos], "%5.3f ", value);
+                        } else if (value < 100.0f) {
+                            pos += sprintf(&row_buffer[pos], "%5.2f ", value);
+                        } else {
+                            pos += sprintf(&row_buffer[pos], "%5.1f ", value);
+                        }
+                    } else {
+                        // Last column: adaptive format without trailing space (5 chars), plus \r\n
+                        if (value < 10.0f) {
+                            pos += sprintf(&row_buffer[pos], "%5.3f\r\n", value);
+                        } else if (value < 100.0f) {
+                            pos += sprintf(&row_buffer[pos], "%5.2f\r\n", value);
+                        } else {
+                            pos += sprintf(&row_buffer[pos], "%5.1f\r\n", value);
+                        }
+                    }
+                }
+
+                // Individual write at exact position
+                MPI_File_write_at(fh, row_offset, row_buffer, pos,
+                                 MPI_CHAR, MPI_STATUS_IGNORE);
+            }
+
+            printf("DEBUG WRITE: Rank %d completed writing %d rows\n", rank, local_output_H);
+            fflush(stdout);
+        }
+
+        // All processes wait before next process writes
+        MPI_Barrier(comm);
+    }
+
+    MPI_File_close(&fh);
+
+    if (rank == 0) {
+        printf("Output saved to %s (%dx%d)\n", filename, output_H_global, output_W_global);
+    }
+
+    return 0;
 }
 
 
 // ===================================================================
 // SERIAL Matrix Operation - Used for kernel or debugging
 // ===================================================================
-// Serial versions for testing without MPI
 int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
