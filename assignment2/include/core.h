@@ -1,6 +1,5 @@
 #ifndef CORE_H
 #define CORE_H
-#include <stdio.h>
 
 enum AccOpt{ ACC_SERIAL, ACC_OMP, ACC_MPI, ACC_HYBRID };
 enum ExecOpt {
