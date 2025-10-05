@@ -1,4 +1,5 @@
 #include "conv2d_mpi.h"
+#include "core_mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -85,7 +86,7 @@ int write_padded_matrix_to_file(
 ) {
     FILE *fp = fopen(filename, "w");
     if (!fp) {
-        fprintf(stderr, "Error: Cannot open %s for writing\n", filename);
+        ERRORF("Error: Cannot open %s for writing\n", filename);
         return -1;
     }
 
@@ -148,7 +149,7 @@ float** mpi_generate_local_padded_matrix(
     // Allocate padded matrix
     float **matrix = allocate_matrix(*padded_local_H, *padded_local_W);
     if (matrix == NULL) {
-        fprintf(stderr, "Error: Rank %d failed to allocate local padded matrix\n", rank);
+        ERRORF("Error: Rank %d failed to allocate local padded matrix\n", rank);
         return NULL;
     }
 
@@ -203,7 +204,7 @@ float** mpi_read_local_padded_matrix(
     int result = MPI_File_open(comm, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
     if (result != MPI_SUCCESS) {
         if (rank == 0) {
-            fprintf(stderr, "Error: Cannot open file %s for reading\n", filename);
+            ERRORF("Error: Cannot open file %s for reading\n", filename);
         }
         return NULL;
     }
@@ -216,7 +217,7 @@ float** mpi_read_local_padded_matrix(
 
         // Parse dimensions from header
         if (sscanf(header, "%d %d", H_global, W_global) != 2) {
-            fprintf(stderr, "Error: Invalid file format in %s\n", filename);
+            ERRORF("Error: Invalid file format in %s\n", filename);
             MPI_File_close(&fh);
             return NULL;
         }
@@ -260,7 +261,7 @@ float** mpi_read_local_padded_matrix(
     float **matrix = allocate_matrix(*padded_local_H, *padded_local_W);
 
     if (matrix == NULL) {
-        fprintf(stderr, "Error: Rank %d failed to allocate local padded matrix\n", rank);
+        ERRORF("Error: Rank %d failed to allocate local padded matrix\n", rank);
         MPI_File_close(&fh);
         return NULL;
     }
@@ -298,7 +299,7 @@ float** mpi_read_local_padded_matrix(
         // Allocate buffer for row (chars_per_row + 1 for safety)
         char row_buffer[10000];  // Should be enough for most cases
         if (chars_per_row >= 10000) {
-            fprintf(stderr, "Error: Row too large (%d chars)\n", chars_per_row);
+            ERRORF("Error: Row too large (%d chars)\n", chars_per_row);
             free_matrix(matrix, *padded_local_H);
             MPI_File_close(&fh);
             return NULL;
@@ -319,7 +320,7 @@ float** mpi_read_local_padded_matrix(
                 ptr += chars_read;
             } else {
                 #ifdef DEBUG
-                fprintf(stderr, "Rank %d: Error parsing row %d col %d, remaining buffer: '%s'\n",
+                ERRORF("Rank %d: Error parsing row %d col %d, remaining buffer: '%s'\n",
                         rank, global_row, j, ptr);
                 #endif
             }
@@ -367,7 +368,7 @@ int mpi_write_input_parallel(
                               MPI_INFO_NULL, &fh);
     if (result != MPI_SUCCESS) {
         if (rank == 0) {
-            fprintf(stderr, "Error: Cannot open file %s for writing\n", filename);
+            ERRORF("Error: Cannot open file %s for writing\n", filename);
         }
         return -1;
     }
@@ -446,7 +447,7 @@ int mpi_write_output_parallel(
                               MPI_INFO_NULL, &fh);
     if (result != MPI_SUCCESS) {
         if (rank == 0) {
-            fprintf(stderr, "Error: Cannot open file %s for writing\n", filename);
+            ERRORF("Error: Cannot open file %s for writing\n", filename);
         }
         return -1;
     }
@@ -538,13 +539,13 @@ int mpi_write_output_parallel(
 int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int *cols) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
-        fprintf(stderr, "Error: Cannot open file %s\n", filename);
+        ERRORF("Error: Cannot open file %s\n", filename);
         return -1;
     }
 
     // Read dimensions
     if (fscanf(file, "%d %d", rows, cols) != 2) {
-        fprintf(stderr, "Error: Invalid file format in %s\n", filename);
+        ERRORF("Error: Invalid file format in %s\n", filename);
         fclose(file);
         return -1;
     }
@@ -552,7 +553,7 @@ int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int 
     // Allocate the matrix
     *matrix = allocate_matrix(*rows, *cols);
     if (*matrix == NULL) {
-        fprintf(stderr, "Error: Cannot allocate matrix\n");
+        ERRORF("Error: Cannot allocate matrix\n");
         fclose(file);
         return -1;
     }
@@ -561,7 +562,7 @@ int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int 
     for (int i = 0; i < *rows; i++) {
         for (int j = 0; j < *cols; j++) {
             if (fscanf(file, "%f", &((*matrix)[i][j])) != 1) {
-                fprintf(stderr, "Error: Cannot read matrix element [%d][%d]\n", i, j);
+                ERRORF("Error: Cannot read matrix element [%d][%d]\n", i, j);
                 free_matrix(*matrix, *rows);
                 fclose(file);
                 return -1;
@@ -576,7 +577,7 @@ int read_matrix_from_file(const char *filename, float ***matrix, int *rows, int 
 int write_matrix_to_file(const char *filename, float **matrix, int rows, int cols) {
     FILE *file = fopen(filename, "w");
     if (file == NULL) {
-        fprintf(stderr, "Error: Cannot create file %s\n", filename);
+        ERRORF("Error: Cannot create file %s\n", filename);
         return -1;
     }
 
@@ -590,7 +591,7 @@ int write_matrix_to_file(const char *filename, float **matrix, int rows, int col
         }
         fprintf(file, "\n");
     }
-    
+
     fclose(file);
     return 0;
 }
@@ -616,9 +617,8 @@ void print_matrix(float **matrix, int rows, int cols) {
             printf("%.3f", matrix[i][j]);
             if (j < cols - 1) printf(" ");
         }
-        printf("\n");
+        puts("");
     }
-    printf("\n");
 }
 
 float **generate_random_matrix(int rows, int cols, float min_val, float max_val) {

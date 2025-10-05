@@ -28,9 +28,8 @@ void print_usage(const char *program_name) {
    printf("  -sW STRIDE  Horizontal stride (default: 1)\n");
    printf("  -p PRECI    Enable verify mode with precision\n");
    printf("              (1 => 0.1, 2 => 0.01, etc.)\n");
-   printf("  -s          Use serial implementation only\n");
-   printf("  -m          Use MPI-only implementation\n");
-   printf("  -P          Use OpenMP-only implementation\n");
+   printf("  -s          Serial (Disable OpenMP)\n");
+   printf("  -m          Enable MPI\n");
    printf("  -t          Time the execution in milliseconds\n");
    printf("  -T          Time the execution in seconds\n");
    printf("  -v          Verbose output\n");
@@ -130,7 +129,7 @@ int init_params(
 
     int long_index = 0;
     int opt;
-    while ((opt = getopt_long_only(argc, argv, "f:g:o:H:W:p:smPtTvh",
+    while ((opt = getopt_long_only(argc, argv, "f:g:o:H:W:p:smtTvh",
                                    long_options, &long_index)) != -1) {
         switch (opt) {
             case 'h':
@@ -214,10 +213,14 @@ int init_params(
     bool has_generation = (input_H > 0) && (input_W > 0) && (kernel_H > 0) && (kernel_W > 0);
     bool has_input_files = (input_file != NULL) && (kernel_file != NULL);
     bool has_output_file = output_file != NULL;
-    bool output_file_exist;
+    int output_file_exist = true;
+
+    // Init MPI, even if the program isn't running in MPI Context.
+    init_mpi(&argc, &argv);
 
     ROOT_DO(
         output_file_exist = (access(output_file, F_OK) == 0);
+        MPI_Bcast(&output_file_exist, 1, MPI_INT, 0, MPI_COMM_WORLD);
     );
 
     if (!has_generation && !has_input_files) {
@@ -251,9 +254,6 @@ int init_params(
     } else {
         return -1;
     }
-
-    // Init MPI, even if the program isn't running in MPI Context.
-    init_mpi(&argc, &argv);
 
     if (*execopt == EXEC_Verify || *execopt == EXEC_PrintToScreen || *execopt == EXEC_CalcToFile) {
         read_size_from_files(input_file, kernel_file, calc);
