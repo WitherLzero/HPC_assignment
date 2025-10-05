@@ -5,20 +5,15 @@
 #include <math.h>
 #include <stdint.h>
 
-// OpenMP performance tuning parameters
-#define OMP_CHUNK_SIZE 8        // Rows per chunk for dynamic scheduling
-#define PREFETCH_DISTANCE 2     // Rows to prefetch ahead
-#define MIN_PARALLEL_SIZE 100   // Minimum matrix size for parallelization
+#define OMP_CHUNK_SIZE 8
+#define PREFETCH_DISTANCE 2
+#define MIN_PARALLEL_SIZE 100
 
 void calculate_stride_output_dims(int input_H, int input_W, int stride_H, int stride_W,
                                   int *output_H, int *output_W) {
     *output_H = (int)ceil((double)input_H / stride_H);
     *output_W = (int)ceil((double)input_W / stride_W);
 }
-
-// ===================================================================
-// PHASE 2: Padding Calculation Utilities (Memory-Optimized Plan)
-// ===================================================================
 
 void calculate_padding_for_process(
     int rank, int size,
@@ -55,41 +50,29 @@ void calculate_local_dimensions(
     int* local_start_row,
     int* padded_local_H, int* padded_local_W
 ) {
-    // OUTPUT-FIRST DISTRIBUTION STRATEGY
-    // Instead of distributing INPUT rows evenly, we distribute OUTPUT rows evenly,
-    // then calculate how many INPUT rows each process needs.
-
-    // Step 1: Calculate expected output dimensions (same as input for "same" padding)
+    // OUTPUT-FIRST DISTRIBUTION: Distribute output rows evenly, then calculate input needs
     int output_H = H_global;
     int output_W = W_global;
 
-    // Step 2: Distribute output rows evenly
     int base_output_rows = output_H / size;
     int output_remainder = output_H % size;
     int my_output_rows = base_output_rows + (rank < output_remainder ? 1 : 0);
     int output_start_row = rank * base_output_rows + (rank < output_remainder ? rank : output_remainder);
 
-    // Step 3: Calculate input rows needed for this process's output rows
-    // For "same" padding, to produce N output rows with kernel kH, we need:
-    // - N + (kH - 1) input rows in the middle
-    // - But first/last process need padding on their end
-
+    // Calculate padding requirements for this process
     int pad_top, pad_bottom, pad_left, pad_right;
     calculate_padding_for_process(rank, size, kH, kW,
                                    &pad_top, &pad_bottom,
                                    &pad_left, &pad_right);
 
-    // To produce my_output_rows outputs with kernel kH, we need:
-    // padded_input_rows = my_output_rows + (kH - 1)
+    // Padded input size: my_output_rows + (kH - 1)
     *padded_local_H = my_output_rows + (kH - 1);
     *padded_local_W = W_global + (kW - 1);
 
-    // Calculate how many actual data rows (non-padding) we need
     *local_H = *padded_local_H - pad_top - pad_bottom;
     *local_start_row = output_start_row;
     *local_W = W_global;
-
- }
+}
 
 void calculate_local_dimensions_stride_aware(
     int rank, int size,
@@ -100,25 +83,19 @@ void calculate_local_dimensions_stride_aware(
     int* local_start_row,
     int* padded_local_H, int* padded_local_W
 ) {
-    // OUTPUT-FIRST DISTRIBUTION STRATEGY
-    // CRITICAL: Must match OLD version which operates on PADDED matrix!
-    // H_global here is the ORIGINAL unpadded size from file
-    // We need to calculate based on padded size, then map back for file reading
-
-    // Step 1: Calculate PADDED global dimensions (what OLD version sees)
+    // STRIDE-AWARE DISTRIBUTION: Operates on padded matrix, maps back to file coordinates
+    // H_global is ORIGINAL unpadded size from file
     int H_global_padded = H_global + (kH - 1);
     int W_global_padded = W_global + (kW - 1);
 
-    // Step 2: Calculate global output dimensions based on PADDED size
     int global_output_H = (H_global_padded - kH + 1 + sH - 1) / sH;
 
-    // Step 2: Distribute output rows evenly across processes
+    // Distribute output rows evenly
     int output_base_rows = global_output_H / size;
     int output_remainder = global_output_H % size;
     int my_output_rows = output_base_rows + (rank < output_remainder ? 1 : 0);
     int my_output_start = rank * output_base_rows + (rank < output_remainder ? rank : output_remainder);
 
-    // Handle processes with zero output rows
     if (my_output_rows == 0) {
         *local_H = 0;
         *local_W = W_global;
@@ -128,93 +105,65 @@ void calculate_local_dimensions_stride_aware(
         return;
     }
 
-    // Step 3: Calculate required input rows for this output range
+    // Calculate input rows needed for this output range
     int input_start = my_output_start * sH;
     int input_end = (my_output_start + my_output_rows - 1) * sH + kH;
-
-    // Ensure we don't exceed global bounds
     if (input_end > H_global_padded) input_end = H_global_padded;
 
     int my_input_rows = input_end - input_start;
 
-    // Step 4: Add halo regions (to be read from file, not filled by exchange)
+    // Add halo regions for convolution overlap
     int halo_size = (kH - 1) / 2;
     int halo_top = (rank > 0) ? halo_size : 0;
     int halo_bottom = (rank < size - 1) ? halo_size : 0;
 
-    // Map padded space to file coordinates for reading
-    // Padded matrix layout: [top padding rows] [file data rows] [bottom padding rows]
+    // Map padded coordinates to file coordinates
     int pad_offset = (kH - 1) / 2;
 
-    // Calculate which part of padded matrix this rank needs (including halo)
     int padded_range_start = input_start - halo_top;
     int padded_range_end = input_end + halo_bottom;
     if (padded_range_start < 0) padded_range_start = 0;
     if (padded_range_end > H_global_padded) padded_range_end = H_global_padded;
 
-    // Map to file coordinates (subtract padding offset)
     int file_read_start = padded_range_start - pad_offset;
     int file_read_end = padded_range_end - pad_offset;
-
-    // Clip to valid file range
     if (file_read_start < 0) file_read_start = 0;
     if (file_read_end > H_global) file_read_end = H_global;
 
-    // local_start_row is where we START READING from the file
     *local_start_row = file_read_start;
-
-    // local_H is the number of rows we READ from the file
     *local_H = file_read_end - file_read_start;
     *local_W = W_global;
-
     *padded_local_H = my_input_rows + halo_top + halo_bottom;
     *padded_local_W = W_global_padded;
-
 }
 
-// ===================================================================
-// End of Phase 2 Padding Utilities
-// ===================================================================
 
 void conv2d_stride_serial(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output) {
-    // For "same" padding, the unpadded dimensions would be:
-    int original_H = H - kH + 1;  // Remove padding to get original size
+    int original_H = H - kH + 1;
     int original_W = W - kW + 1;
 
-    // Calculate strided output dimensions based on original (unpadded) size
     int output_H, output_W;
     calculate_stride_output_dims(original_H, original_W, sH, sW, &output_H, &output_W);
-
-    // Perform strided convolution on the padded input
-    // The padded input f has dimensions H x W
-    // We sample at stride intervals starting from the valid convolution positions
 
     for (int i = 0; i < output_H; i++) {
         for (int j = 0; j < output_W; j++) {
             float sum = 0.0f;
-
-            // Starting position in the padded input for this output element
-            // Since input is padded, we can start convolution at position (i*sH, j*sW)
             int start_row = i * sH;
             int start_col = j * sW;
 
-            // Ensure we don't go beyond the valid convolution area
             if (start_row + kH <= H && start_col + kW <= W) {
-                // Apply kernel at this position
                 for (int ki = 0; ki < kH; ki++) {
                     for (int kj = 0; kj < kW; kj++) {
                         sum += f[start_row + ki][start_col + kj] * g[ki][kj];
                     }
                 }
             }
-
             output[i][j] = sum;
         }
     }
 }
 
-// OpenMP parallel implementation with stride
 void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output) {
     #pragma omp parallel
@@ -225,21 +174,18 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
         }
     }
 
-    // Calculate actual input dimensions (remove padding)
     int original_H = H - kH + 1;
     int original_W = W - kW + 1;
-
-    // Calculate strided output dimensions
     int output_H = (int)ceil((double)original_H / sH);
     int output_W = (int)ceil((double)original_W / sW);
 
-    // Check for minimum size threshold - use serial for small matrices
+    // Use serial for small matrices
     if (output_H * output_W < MIN_PARALLEL_SIZE) {
         conv2d_stride_serial(f, H, W, g, kH, kW, sH, sW, output);
         return;
     }
 
-    // Select optimized implementation based on kernel size
+    // Optimized kernels for common sizes
     if (kH == 3 && kW == 3) {
         conv2d_3x3_stride_optimized_openmp(f, H, W, g, sH, sW, output);
         return;
@@ -253,7 +199,6 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
     {
         #pragma omp for schedule(dynamic, OMP_CHUNK_SIZE) nowait
         for (int i = 0; i < output_H; i++) {
-            // Prefetch next input row for better cache performance
             int next_row = (i + PREFETCH_DISTANCE) * sH;
             if (next_row < H) {
                 __builtin_prefetch(&f[next_row][0], 0, 3);
@@ -264,7 +209,6 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
                 int start_row = i * sH;
                 int start_col = j * sW;
 
-                // Apply kernel with bounds checking
                 if (start_row + kH <= H && start_col + kW <= W) {
                     for (int ki = 0; ki < kH; ki++) {
                         #pragma omp simd reduction(+:sum)
@@ -273,7 +217,6 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
                         }
                     }
                 }
-
                 output[i][j] = sum;
             }
         }
@@ -283,31 +226,24 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
 // Optimized 3x3 kernel OpenMP implementation with stride
 void conv2d_3x3_stride_optimized_openmp(float **restrict f, int H, int W, float **restrict g,
                                          int sH, int sW, float **restrict output) {
-    // Calculate actual input dimensions (remove padding)
-    int original_H = H - 2;  // 3x3 kernel needs 2 pixels of padding removed
+    int original_H = H - 2;
     int original_W = W - 2;
-
-    // Calculate strided output dimensions
     int output_H = (int)ceil((double)original_H / sH);
     int output_W = (int)ceil((double)original_W / sW);
 
-    // Cache kernel values for better performance
+    // Cache kernel values
     const float g00 = g[0][0], g01 = g[0][1], g02 = g[0][2];
     const float g10 = g[1][0], g11 = g[1][1], g12 = g[1][2];
     const float g20 = g[2][0], g21 = g[2][1], g22 = g[2][2];
 
-    // Parallel loop over output rows
     #pragma omp parallel for schedule(static)
     for (int i = 0; i < output_H; i++) {
         int row = i * sH;
         for (int j = 0; j < output_W; j++) {
             int col = j * sW;
-
-            // Fully unrolled 3x3 convolution
             float sum = f[row][col]     * g00 + f[row][col+1]     * g01 + f[row][col+2]     * g02 +
                         f[row+1][col]   * g10 + f[row+1][col+1]   * g11 + f[row+1][col+2]   * g12 +
                         f[row+2][col]   * g20 + f[row+2][col+1]   * g21 + f[row+2][col+2]   * g22;
-
             output[i][j] = sum;
         }
     }
@@ -351,30 +287,7 @@ void conv2d_5x5_stride_optimized_openmp(float **restrict f, int H, int W, float 
     }
 }
 
-/**
- * @brief Memory-optimized MPI-only strided convolution
- *
- * This function performs strided convolution on LOCAL padded input data
- * that has already been distributed/generated. It does NOT distribute or gather.
- *
- * Key differences from old approach:
- * - f is LOCAL padded input (not global matrix)
- * - output is LOCAL output (not global matrix)
- * - No distribution, no gathering - just pure computation
- * - Kernel is assumed already broadcasted to all processes
- * - Performs halo exchange internally if multiple processes
- *
- * @param f Local padded input matrix (includes padding/halo space)
- * @param H Local padded input height
- * @param W Local padded input width
- * @param g Kernel matrix (already broadcasted)
- * @param kH Kernel height
- * @param kW Kernel width
- * @param sH Vertical stride
- * @param sW Horizontal stride
- * @param output Local output matrix (pre-allocated)
- * @param comm MPI communicator (typically active_comm)
- */
+// MPI-only strided convolution 
 void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                        int sH, int sW, float **restrict output, MPI_Comm comm) {
     int rank, size;
@@ -386,19 +299,6 @@ void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int
     if (size > 1 ) {
         mpi_exchange_halos(f, H, W, kH, comm);
     }
-
-    // DEBUG: Print local matrix after halo   
-    // for (int p = 0; p < size; p++) {
-    //     if(rank == p) {
-    //         printf("\n=== DEBUG Rank %d: Local matrix (after halo) ===\n", rank);
-    //         printf("Dimensions: %d x %d\n", H, W);
-    //         if (H <= 10 && W <= 10) {
-    //             print_matrix(f, H, W);
-    //         }
-    //         fflush(stdout);
-    //     }
-    //     MPI_Barrier(comm);
-    // }
 
 
     // MPI-only: single-threaded computation on local data
@@ -418,44 +318,29 @@ void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int
     }
 }
 
-/**
- * @brief Memory-optimized Hybrid (MPI + OpenMP) strided convolution
- *
- * This function performs strided convolution on LOCAL padded input data
- * using both MPI (distributed memory) and OpenMP (shared memory) parallelization.
- *
- * Key differences from old approach:
- * - f is LOCAL padded input (not global matrix)
- * - output is LOCAL output (not global matrix)
- * - No distribution, no gathering - just pure computation
- * - Kernel is assumed already broadcasted to all processes
- * - Performs halo exchange internally if multiple processes
- * - Uses OpenMP for within-process parallelization
- *
- * @param f Local padded input matrix (includes padding/halo space)
- * @param H Local padded input height
- * @param W Local padded input width
- * @param g Kernel matrix (already broadcasted)
- * @param kH Kernel height
- * @param kW Kernel width
- * @param sH Vertical stride
- * @param sW Horizontal stride
- * @param output Local output matrix (pre-allocated)
- * @param comm MPI communicator (typically active_comm)
- */
+// Hybrid MPI+OpenMP strided convolution 
 void conv2d_stride_hybrid(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output, MPI_Comm comm) {
-    int size;
+    int rank, size;
+    MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
 
-    // Perform halo exchange only for stride=1 cases
-    // For stride>1, data is already distributed with necessary overlaps via file reading
-    if (size > 1 ) {
+    if (size > 1) {
         mpi_exchange_halos(f, H, W, kH, comm);
     }
 
-    // Hybrid: MPI + OpenMP computation on local data
-    conv2d_stride_openmp(f, H, W, g, kH, kW, sH, sW, output);
+    if (sH > 1 || sW > 1) {
+        int halo_size = (kH - 1) / 2;
+        int halo_top = (rank > 0) ? halo_size : 0;
+        int halo_bottom = (rank < size - 1) ? halo_size : 0;
+
+        float **data_region = f + halo_top;
+        int data_region_H = H - halo_top - halo_bottom;
+
+        conv2d_stride_openmp(data_region, data_region_H, W, g, kH, kW, sH, sW, output);
+    } else {
+        conv2d_stride_openmp(f, H, W, g, kH, kW, sH, sW, output);
+    }
 }
 
 
@@ -531,29 +416,6 @@ void initialize_matrix(float **matrix, int rows, int cols, float value) {
     }
 }
 
-
-// CAN BE REMOVED ??  
-void generate_padded_matrix(float **input, int height, int width,
-                            int kernel_height, int kernel_width,
-                            float ***padded, int *padded_height,
-                            int *padded_width) {
-    // Asymmetric "same" padding so that output has the same size as input
-    // Works for both odd and even kernel sizes
-    int pad_top = (kernel_height - 1) / 2;
-    int pad_left = (kernel_width - 1) / 2;
-    int pad_bottom = kernel_height - 1 - pad_top;
-    int pad_right = kernel_width - 1 - pad_left;
-
-    *padded_height = height + pad_top + pad_bottom;
-    *padded_width = width + pad_left + pad_right;
-    *padded = allocate_matrix(*padded_height, *padded_width);
-    initialize_matrix(*padded, *padded_height, *padded_width, 0.0f);
-    for (int i = 0; i < height; i++) {
-        // Copy each row of the input matrix into the center of the padded matrix
-        memcpy((*padded)[i + pad_top] + pad_left, input[i],
-               width * sizeof(float));
-    }
-}
 
 // MPI halo exchange function
 void mpi_exchange_halos(float **local_matrix, int local_H, int local_W,
@@ -679,84 +541,7 @@ void mpi_distribute_matrix_stride_aware(float **global_matrix, int global_H, int
     }
 }
 
-// Original matrix distribution function (kept for backward compatibility)
-void mpi_distribute_matrix(float **global_matrix, int global_H, int global_W,
-                           int kernel_H, int kernel_W,
-                           float ***local_matrix, int *local_H, int *local_W,
-                           int *local_start_row, MPI_Comm comm) {
-    int rank, size;
-    MPI_Comm_rank(comm, &rank);
-    MPI_Comm_size(comm, &size);
-
-    // Distribute input rows evenly among processes
-    int base_rows = global_H / size;
-    int remainder = global_H % size;
-
-    // Each process gets base_rows, first 'remainder' processes get one extra
-    int my_rows = base_rows + (rank < remainder ? 1 : 0);
-    *local_start_row = rank * base_rows + (rank < remainder ? rank : remainder);
-
-    // Add halo regions for convolution boundary conditions
-    int halo_size = (kernel_H - 1) / 2;
-    int halo_top = (rank > 0) ? halo_size : 0;
-    int halo_bottom = (rank < size - 1) ? halo_size : 0;
-
-    *local_H = my_rows + halo_top + halo_bottom;
-    *local_W = global_W;
-
-    // Allocate local matrix
-    *local_matrix = allocate_matrix(*local_H, *local_W);
-
-    if (rank == 0) {
-        // Root process: copy its own data and send to others
-
-        // Copy root's own data (including bottom halo)
-        int my_copy_rows = my_rows + halo_bottom;
-        for (int i = 0; i < my_copy_rows; i++) {
-            for (int j = 0; j < global_W; j++) {
-                (*local_matrix)[i][j] = global_matrix[i][j];
-            }
-        }
-
-        // Send data to other processes
-        for (int p = 1; p < size; p++) {
-            int p_base_rows = base_rows + (p < remainder ? 1 : 0);
-            int p_start_row = p * base_rows + (p < remainder ? p : remainder);
-            int p_halo_top = (p > 0) ? halo_size : 0;
-            int p_halo_bottom = (p < size - 1) ? halo_size : 0;
-            int p_local_H = p_base_rows + p_halo_top + p_halo_bottom;
-
-            // Calculate the range of global matrix rows to send
-            int global_start = p_start_row - p_halo_top;
-            int global_end = p_start_row + p_base_rows + p_halo_bottom;
-
-            // Ensure we stay within bounds
-            if (global_start < 0) global_start = 0;
-            if (global_end > global_H) global_end = global_H;
-
-            // Send each row within the valid range
-            int local_row = 0;
-            for (int global_row = global_start; global_row < global_end; global_row++) {
-                MPI_Send(global_matrix[global_row], global_W, MPI_FLOAT, p, local_row, comm);
-                local_row++;
-            }
-
-            // Send zero rows for any remaining local rows
-            float *zero_row = (float*)calloc(global_W, sizeof(float));
-            while (local_row < p_local_H) {
-                MPI_Send(zero_row, global_W, MPI_FLOAT, p, local_row, comm);
-                local_row++;
-            }
-            free(zero_row);
-        }
-    } else {
-        // Non-root processes: receive their data
-        for (int i = 0; i < *local_H; i++) {
-            MPI_Recv((*local_matrix)[i], global_W, MPI_FLOAT, 0, i, comm, MPI_STATUS_IGNORE);
-        }
-    }
-}
-
+// Gather local output matrices back to global output matrix
 void mpi_gather_output(float **local_output, int local_output_H, int local_output_W,
                        int local_start_row, float ***global_output,
                        int global_output_H, int global_output_W, MPI_Comm comm) {
@@ -801,9 +586,7 @@ void mpi_gather_output(float **local_output, int local_output_H, int local_outpu
         }
     } else {
         // Non-root processes: send their output to root
-
         // First, send dimensions and start row (even if 0)
-        // For processes with no output, use 0 as a safe start row
         int output_start_row = (local_output_H > 0) ? local_start_row : 0;
         MPI_Send(&local_output_H, 1, MPI_INT, 0, 100, comm);
         MPI_Send(&local_output_W, 1, MPI_INT, 0, 101, comm);
@@ -818,6 +601,7 @@ void mpi_gather_output(float **local_output, int local_output_H, int local_outpu
     }
 }
 
+// Broadcast kernel to all processes
 void mpi_broadcast_kernel(float ***kernel, int kernel_H, int kernel_W, MPI_Comm comm) {
     int rank;
     MPI_Comm_rank(comm, &rank);
@@ -867,9 +651,4 @@ void mpi_timer_end(mpi_timer_t *timer, MPI_Comm comm) {
     timer->max_time = timer->elapsed_time;
     timer->min_time = timer->elapsed_time;
     timer->avg_time = timer->elapsed_time;
-}
-
-void mpi_timer_print(mpi_timer_t *timer, const char *description, MPI_Comm comm) {
-    printf("Timing - %s: %.6f seconds\n", description, timer->elapsed_time);
-    fflush(stdout);
 }
