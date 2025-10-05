@@ -63,7 +63,7 @@ compare: $(TARGET)
 	@echo "MPI only (2 processes, stride 2x2):"
 	mpirun -np 2 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t -m
 	@echo "OpenMP only (stride 2x2):"
-	mpirun -np 1 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t -p
+	mpirun -np 1 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t
 	@echo "Hybrid MPI+OpenMP (2 processes, stride 2x2):"
 	mpirun -np 2 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t
 

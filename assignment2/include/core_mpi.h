@@ -22,6 +22,7 @@ inline bool is_root() { return RANK == 0; }
         if (VERBOSE) { \
             printf(ANSI_COLOR_BLUE "[DEBUG] " ANSI_COLOR_RESET); \
             printf(__VA_ARGS__); \
+            printf("\n"); \
         } \
     )
 
@@ -29,4 +30,12 @@ inline bool is_root() { return RANK == 0; }
     ROOT_DO( \
         fprintf(stderr, ANSI_COLOR_RED "[ERROR] " ANSI_COLOR_RESET); \
         fprintf(stderr, __VA_ARGS__); \
+        fprintf(stderr, "\n"); \
+    )
+
+#define INFOF(...) \
+    ROOT_DO(\
+        printf(ANSI_COLOR_GREEN "[INFO] " ANSI_COLOR_RESET); \
+        printf(__VA_ARGS__); \
+        printf("\n"); \
     )
