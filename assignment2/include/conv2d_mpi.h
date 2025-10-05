@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 // ==================================================================
-// In conv2d_mpi.c: 
+// In conv2d_mpi.c:
 // ==================================================================
 
 // ------------------------------------------------------------------
@@ -484,6 +484,6 @@ typedef struct {
 } mpi_timer_t;
 
 void mpi_timer_start(mpi_timer_t *timer);
-void mpi_timer_end(mpi_timer_t *timer, MPI_Comm comm);
+void mpi_timer_end(mpi_timer_t *timer);
 
 #endif  // CONV2D_MPI_H

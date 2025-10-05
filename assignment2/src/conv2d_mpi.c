@@ -166,13 +166,6 @@ void conv2d_stride_serial(float **restrict f, int H, int W, float **restrict g, 
 
 void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output) {
-    #pragma omp parallel
-    {
-        #pragma omp single
-        {
-            printf("OpenMP General: Using %d threads\n", omp_get_num_threads());
-        }
-    }
 
     int original_H = H - kH + 1;
     int original_W = W - kW + 1;
@@ -287,7 +280,7 @@ void conv2d_5x5_stride_optimized_openmp(float **restrict f, int H, int W, float 
     }
 }
 
-// MPI-only strided convolution 
+// MPI-only strided convolution
 void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                        int sH, int sW, float **restrict output, MPI_Comm comm) {
     int rank, size;
@@ -318,7 +311,7 @@ void conv2d_stride_mpi(float **restrict f, int H, int W, float **restrict g, int
     }
 }
 
-// Hybrid MPI+OpenMP strided convolution 
+// Hybrid MPI+OpenMP strided convolution
 void conv2d_stride_hybrid(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output, MPI_Comm comm) {
     int rank, size;
@@ -643,7 +636,7 @@ void mpi_timer_start(mpi_timer_t *timer) {
     timer->start_time = MPI_Wtime();
 }
 
-void mpi_timer_end(mpi_timer_t *timer, MPI_Comm comm) {
+void mpi_timer_end(mpi_timer_t *timer) {
     timer->end_time = MPI_Wtime();
     timer->elapsed_time = timer->end_time - timer->start_time;
 
