@@ -6,11 +6,13 @@
 #include <unistd.h>
 #include <mpi.h>
 
-#include "../include/core.h"
+#include "core.h"
+#include "core_mpi.h"
 
-// MPI relative
-int RANK = -1;
-int SIZE = -1;
+bool VERBOSE = false;
+
+int RANK;
+int SIZE;
 
 void print_usage(const char *program_name) {
    printf("Usage: mpirun -np <processes> %s [OPTIONS]\n", program_name);
@@ -42,23 +44,49 @@ void print_usage(const char *program_name) {
    printf("  mpirun -np 1 %s -f f.txt -g g.txt -o expected.txt -p 2\n", program_name);
 }
 
-void calculate_stride_output_dims_c(struct CalcInform* calc) {
-    calc->output_H = (int)ceil((double)calc->input_H / calc->stride_H);
-    calc->output_W = (int)ceil((double)calc->input_W / calc->stride_W);
+inline int output_from_input_padding_stride(int input, int padding, int stride) {
+    return (int)ceilf((input + padding * 2) / (float) stride);
+}
+
+inline int output_with_same_padding(int input, int stride) {
+    return (int)ceilf((float) input / stride);
+}
+
+void calculate_output_size(struct CalcInform* calc) {
+    calc->output_H = output_with_same_padding(calc->input_H, calc->stride_H);
+    calc->output_W = output_with_same_padding(calc->input_W, calc->stride_W);
 }
 
 void read_size_from_files(char* input_file, char* kernel_file, struct CalcInform* calc) {
-    // Read header only to get dimensions
-    FILE *f = fopen(input_file, "r");
-    if (f) {
-        fscanf(f, "%d %d", &calc->input_H, &calc->input_W);
-        fclose(f);
+    int input_H, input_W, kernel_H, kernel_W;
+    if (RANK == 0) {
+        // Read header only to get dimensions
+        FILE *f = fopen(input_file, "r");
+        if (f) {
+            fscanf(f, "%d %d", &input_H, &input_W);
+            fclose(f);
+        }
+        f = fopen(kernel_file, "r");
+        if (f) {
+            fscanf(f, "%d %d", &kernel_H, &kernel_W);
+            fclose(f);
+        }
     }
-    f = fopen(kernel_file, "r");
-    if (f) {
-        fscanf(f, "%d %d", &calc->kernel_H, &calc->kernel_W);
-        fclose(f);
-    }
+    MPI_Bcast(&input_H, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&input_W, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&kernel_H, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&kernel_W, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    calc->input_H = input_H;
+    calc->input_W = input_W;
+    calc->kernel_H = kernel_H;
+    calc->kernel_W = kernel_W;
+}
+
+void init_mpi(int *argc, char*** argv) {
+    MPI_Init(argc, argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &RANK);
+    MPI_Comm_size(MPI_COMM_WORLD, &SIZE);
 }
 
 int init_params(
@@ -217,8 +245,13 @@ int init_params(
         return -1;
     }
 
-    if (*execopt == EXEC_Verify && *execopt == EXEC_Calculate) {
+    // Init MPI, even if the program isn't running in MPI Context.
+    init_mpi(&argc, &argv);
+
+    if (*execopt == EXEC_Verify || *execopt == EXEC_Calculate) {
         read_size_from_files(input_file, kernel_file, calc);
+        calc->stride_H = stride_H;
+        calc->stride_W = stride_W;
     } else {
         calc->input_H = input_H;
         calc->input_W = input_W;
@@ -227,7 +260,7 @@ int init_params(
         calc->stride_H = stride_H;
         calc->stride_W = stride_W;
     }
-    calculate_stride_output_dims_c(calc);
+    calculate_output_size(calc);
 
     param->input_filepath = input_file;
     param->kernel_filepath = kernel_file;
@@ -236,7 +269,7 @@ int init_params(
     param->precision = precision;
     param->time_execution = time_execution;
     param->time_execution_seconds = time_execution_seconds;
-    param->verbose = verbose;
+    VERBOSE = verbose;
 
     return 0;
 }

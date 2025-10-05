@@ -1,6 +1,8 @@
 #ifndef CORE_H
 #define CORE_H
 
+#include <stdbool.h>
+
 enum AccOpt{ ACC_SERIAL, ACC_OMP, ACC_MPI, ACC_HYBRID };
 enum ExecOpt {
     // When matrix size is specified,
@@ -21,7 +23,6 @@ struct Params {
     char* output_filepath;
     int time_execution;
     int time_execution_seconds;
-    int verbose;
     int precision;
 };
 
@@ -44,5 +45,7 @@ int init_params(
     enum AccOpt* accopt,
     enum ExecOpt* execopt
 );
+
+extern bool VERBOSE;
 
 #endif

@@ -19,8 +19,9 @@
 #include <stdbool.h>
 #include <mpi.h>
 
-#include "../include/conv2d_mpi.h"
-#include "../include/core.h"
+#include "conv2d_mpi.h"
+#include "core.h"
+#include "core_mpi.h"
 
 int main(int argc, char *argv[]) {
     struct Params param;
@@ -33,27 +34,20 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Initialize MPI
-    MPI_Init(&argc, &argv);
-
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
     // Determine optimal number of processes (limit to output rows)
-    int optimal_processes = (size > calc.output_H) ? calc.output_H : size;
-    bool is_active_process = (rank < optimal_processes);
+    int optimal_processes = (SIZE > calc.output_H) ? calc.output_H : SIZE;
+    bool is_active_process = (RANK < optimal_processes);
 
     // Create sub-communicator for active processes only
     MPI_Comm active_comm;
     MPI_Comm_split(MPI_COMM_WORLD,
                    is_active_process ? 0 : MPI_UNDEFINED,
-                   rank,
+                   RANK,
                    &active_comm);
 
-    if (rank == 0 && optimal_processes < size) {
+    if (is_root() && optimal_processes < SIZE) {
         printf("Using %d active processes (out of %d total)\n",
-               optimal_processes, size);
+               optimal_processes, SIZE);
     }
 
     // Inactive processes exit early
@@ -63,11 +57,11 @@ int main(int argc, char *argv[]) {
     }
 
     // Update rank and size for active communicator
-    MPI_Comm_rank(active_comm, &rank);
-    MPI_Comm_size(active_comm, &size);
+    MPI_Comm_rank(active_comm, &RANK);
+    MPI_Comm_size(active_comm, &SIZE);
 
 
-    if (rank == 0 && param.verbose) {
+    if (is_root() && VERBOSE) {
         printf("Input dimensions: %d x %d\n", calc.input_H, calc.input_W);
         printf("Kernel dimensions: %d x %d\n", calc.kernel_H, calc.kernel_W);
         printf("Stride: %d x %d\n", calc.stride_H, calc.stride_W);
@@ -90,7 +84,7 @@ int main(int argc, char *argv[]) {
 
         if (calc.stride_H == 1 && calc.stride_W == 1) {
             // PATH A: stride = 1 -> Parallel generation (no overlaps)
-            if (rank == 0 && param.verbose) {
+            if (is_root() && VERBOSE) {
                 printf("Using PATH A: Parallel generation (stride=1)\n");
             }
 
@@ -102,7 +96,7 @@ int main(int argc, char *argv[]) {
             );
 
             if (local_padded_input == NULL) {
-                fprintf(stderr, "Rank %d: Failed to generate local padded input\n", rank);
+                fprintf(stderr, "Rank %d: Failed to generate local padded input\n", RANK);
                 MPI_Comm_free(&active_comm);
                 MPI_Finalize();
                 exit(EXIT_FAILURE);
@@ -120,13 +114,13 @@ int main(int argc, char *argv[]) {
                     active_comm
                 );
 
-                if (write_result == 0 && rank == 0 && param.verbose) {
+                if (write_result == 0 && is_root() && VERBOSE) {
                     printf("Generated input saved to %s (parallel write)\n", param.input_filepath);
                 }
             }
         } else {
             // PATH B: stride > 1 -> Root centralized generation (avoid overlap inconsistency)
-            if (rank == 0 && param.verbose) {
+            if (is_root() && VERBOSE) {
                 printf("Using PATH B: Root centralized generation (stride>1)\n");
             }
 
@@ -134,7 +128,7 @@ int main(int argc, char *argv[]) {
             int global_padded_H, global_padded_W;
 
             // Root generates global padded matrix
-            if (rank == 0) {
+            if (is_root()) {
                 global_padded = generate_random_matrix_into_padded(
                     calc.input_H, calc.input_W, calc.kernel_H, calc.kernel_W,
                     0.0f, 1.0f,
@@ -166,22 +160,22 @@ int main(int argc, char *argv[]) {
             );
 
             if (local_padded_input == NULL) {
-                fprintf(stderr, "Rank %d: Failed during distribution\n", rank);
-                if (rank == 0 && global_padded) free_matrix(global_padded, global_padded_H);
+                fprintf(stderr, "Rank %d: Failed during distribution\n", RANK);
+                if (is_root() && global_padded) free_matrix(global_padded, global_padded_H);
                 MPI_Comm_free(&active_comm);
                 MPI_Finalize();
                 exit(EXIT_FAILURE);
             }
 
             // Root writes file and frees global matrix
-            if (rank == 0 && param.input_filepath) {
+            if (is_root() && param.input_filepath) {
                 int write_result = write_padded_matrix_to_file(
                     global_padded, global_padded_H, global_padded_W,
                     calc.input_H, calc.input_W, calc.kernel_H, calc.kernel_W,
                     param.input_filepath
                 );
 
-                if (write_result == 0 && param.verbose) {
+                if (write_result == 0 && VERBOSE) {
                     printf("Generated input saved to %s (root serial write)\n", param.input_filepath);
                 }
 
@@ -195,7 +189,7 @@ int main(int argc, char *argv[]) {
         // KERNEL GENERATION
         // ====================================================================
 
-        if (rank == 0) {
+        if (is_root()) {
             kernel = generate_random_matrix(calc.kernel_H, calc.kernel_W, 0.0f, 1.0f);
             if (kernel == NULL) {
                 fprintf(stderr, "Error: Failed to generate kernel\n");
@@ -207,7 +201,7 @@ int main(int argc, char *argv[]) {
 
             if (param.kernel_filepath) {
                 write_matrix_to_file(param.kernel_filepath, kernel, calc.kernel_H, calc.kernel_W);
-                if (param.verbose) printf("Generated kernel saved to %s\n", param.kernel_filepath);
+                if (VERBOSE) printf("Generated kernel saved to %s\n", param.kernel_filepath);
             }
         }
 
@@ -227,14 +221,14 @@ int main(int argc, char *argv[]) {
         );
 
         if (local_padded_input == NULL) {
-            fprintf(stderr, "Rank %d: Failed to read local padded input from file\n", rank);
+            fprintf(stderr, "Rank %d: Failed to read local padded input from file\n", RANK);
             MPI_Comm_free(&active_comm);
             MPI_Finalize();
             exit(EXIT_FAILURE);
         }
 
         // Read kernel on root, broadcast to all
-        if (rank == 0) {
+        if (is_root()) {
             read_matrix_from_file(param.kernel_filepath, &kernel, &calc.kernel_H, &calc.kernel_W);
             if (kernel == NULL) {
                 fprintf(stderr, "Error: Failed to read kernel from file %s\n", param.kernel_filepath);
@@ -291,7 +285,7 @@ int main(int argc, char *argv[]) {
 
     // End timing
     mpi_timer_end(&timer);
-    if (rank == 0) {
+    if (is_root()) {
         if (param.time_execution_seconds) {
             printf("Timing - Convolution with stride: %.6f seconds\n", timer.elapsed_time);
         } else if (param.time_execution) {
@@ -307,19 +301,19 @@ int main(int argc, char *argv[]) {
 
     float **full_output = NULL;
 
-    if (size == 1) {
+    if (SIZE == 1) {
         full_output = local_output;
     } else if (execopt == EXEC_Verify || execopt == EXEC_GenerateOnly) {
         // Calculate output start row for gathering
         int output_start_row;
-        int output_base_rows = calc.output_H / size;
-        int output_remainder = calc.output_H % size;
+        int output_base_rows = calc.output_H / SIZE;
+        int output_remainder = calc.output_H % SIZE;
 
         if (calc.stride_H > 1 || calc.stride_W > 1) {
-            output_start_row = rank * output_base_rows + (rank < output_remainder ? rank : output_remainder);
+            output_start_row = RANK * output_base_rows + (RANK < output_remainder ? RANK : output_remainder);
         } else {
             output_start_row = 0;
-            for (int p = 0; p < rank; p++) {
+            for (int p = 0; p < RANK; p++) {
                 int p_local_output_H = output_base_rows + (p < output_remainder ? 1 : 0);
                 output_start_row += p_local_output_H;
             }
@@ -334,7 +328,7 @@ int main(int argc, char *argv[]) {
     // Verification mode
     if (execopt == EXEC_Verify) {
         // Verify mode: output_file is the EXPECTED file to compare against
-        if (rank == 0) {
+        if (is_root()) {
             float **expected = NULL;
             int expected_H, expected_W;
 
@@ -358,14 +352,14 @@ int main(int argc, char *argv[]) {
     } else if (execopt == EXEC_GenerateSave || execopt == EXEC_Calculate) {
         // Write output to file
         int output_start_row;
-        int output_base_rows = calc.output_H / size;
-        int output_remainder = calc.output_H % size;
+        int output_base_rows = calc.output_H / SIZE;
+        int output_remainder = calc.output_H % SIZE;
 
         if (calc.stride_H > 1 || calc.stride_W > 1) {
-            output_start_row = rank * output_base_rows + (rank < output_remainder ? rank : output_remainder);
+            output_start_row = RANK * output_base_rows + (RANK < output_remainder ? RANK : output_remainder);
         } else {
             output_start_row = 0;
-            for (int p = 0; p < rank; p++) {
+            for (int p = 0; p < RANK; p++) {
                 int p_local_output_H = output_base_rows + (p < output_remainder ? 1 : 0);
                 output_start_row += p_local_output_H;
             }
@@ -381,10 +375,10 @@ int main(int argc, char *argv[]) {
             active_comm
         );
 
-        if (write_result != 0 && rank == 0) {
+        if (write_result != 0 && is_root()) {
             fprintf(stderr, "Error: Failed to write output file\n");
         }
-    } else if (rank == 0 && param.verbose && full_output != NULL) {
+    } else if (is_root() && VERBOSE && full_output != NULL) {
         if (calc.output_H <= 10 && calc.output_W <= 10) {
             print_matrix(full_output, calc.output_H, calc.output_W);
         } else {
@@ -393,7 +387,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Cleanup
-    if (full_output != NULL && full_output != local_output && rank == 0) {
+    if (full_output != NULL && full_output != local_output && is_root()) {
         free_matrix(full_output, calc.output_H);
     }
     if (local_padded_input) free_matrix(local_padded_input, padded_local_H);
