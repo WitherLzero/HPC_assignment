@@ -339,17 +339,17 @@ int main(int argc, char *argv[]) {
                 if (expected_H == calc.output_H && expected_W == calc.output_W) {
                     float tolerance = pow(10.0f, -param.precision);
                     if (full_output != NULL && compare_matrices(full_output, expected, calc.output_H, calc.output_W, tolerance)) {
-                        printf("Verify Pass!\n");
+                        INFOF("Verify Pass!\n");
                     } else {
-                        printf("Verify Failed!\n");
+                        INFOF("Verify Failed!\n");
                     }
                 } else {
-                    printf("Verify Failed! Dimension mismatch: expected %dx%d, got %dx%d\n",
+                    ERRORF("Verify Failed! Dimension mismatch: expected %dx%d, got %dx%d",
                            expected_H, expected_W, calc.output_H, calc.output_W);
                 }
                 free_matrix(expected, expected_H);
             } else {
-                printf("Error reading expected output file for verification\n");
+                ERRORF("Error reading expected output file for verification");
             }
         }
     } else if (execopt == EXEC_GenerateSave || execopt == EXEC_CalcToFile) {
@@ -385,7 +385,7 @@ int main(int argc, char *argv[]) {
         if (calc.output_H <= 10 && calc.output_W <= 10) {
             print_matrix(full_output, calc.output_H, calc.output_W);
         } else {
-            printf("Result computed (%dx%d)\n", calc.output_H, calc.output_W);
+            INFOF("Result computed (%dx%d)", calc.output_H, calc.output_W);
         }
     )
 
