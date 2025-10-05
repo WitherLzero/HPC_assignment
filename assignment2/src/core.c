@@ -211,9 +211,14 @@ int init_params(
     }
 
     // Validate input combinations
-    int has_generation = (input_H > 0) && (input_W > 0) && (kernel_H > 0) && (kernel_W > 0);
-    int has_input_files = (input_file != NULL) && (kernel_file != NULL);
-    int has_output_file = output_file != NULL;
+    bool has_generation = (input_H > 0) && (input_W > 0) && (kernel_H > 0) && (kernel_W > 0);
+    bool has_input_files = (input_file != NULL) && (kernel_file != NULL);
+    bool has_output_file = output_file != NULL;
+    bool output_file_exist;
+
+    ROOT_DO(
+        output_file_exist = (access(output_file, F_OK) == 0);
+    );
 
     if (!has_generation && !has_input_files) {
         perror("No inputs");
@@ -237,10 +242,12 @@ int init_params(
         *execopt = EXEC_GenerateOnly;
     } else if (has_generation && has_input_files && has_output_file) {
         *execopt = EXEC_GenerateSave;
-    } else if (!has_generation && has_input_files && has_output_file) {
+    } else if (!has_generation && has_input_files && has_output_file && output_file_exist) {
         *execopt = EXEC_Verify;
+    } else if (!has_generation && has_input_files && has_output_file && !output_file_exist) {
+        *execopt = EXEC_CalcToFile;
     } else if (!has_generation && has_input_files && !has_output_file) {
-        *execopt = EXEC_Calculate;
+        *execopt = EXEC_PrintToScreen;
     } else {
         return -1;
     }
@@ -248,7 +255,7 @@ int init_params(
     // Init MPI, even if the program isn't running in MPI Context.
     init_mpi(&argc, &argv);
 
-    if (*execopt == EXEC_Verify || *execopt == EXEC_Calculate) {
+    if (*execopt == EXEC_Verify || *execopt == EXEC_PrintToScreen || *execopt == EXEC_CalcToFile) {
         read_size_from_files(input_file, kernel_file, calc);
         calc->stride_H = stride_H;
         calc->stride_W = stride_W;

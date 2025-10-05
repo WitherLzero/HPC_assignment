@@ -45,8 +45,8 @@ int main(int argc, char *argv[]) {
                    RANK,
                    &active_comm);
 
-    if (is_root() && optimal_processes < SIZE) {
-        printf("Using %d active processes (out of %d total)\n",
+    if (optimal_processes < SIZE) {
+        DEBUGF("Using %d active processes (out of %d total)\n",
                optimal_processes, SIZE);
     }
 
@@ -61,12 +61,11 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(active_comm, &SIZE);
 
 
-    if (is_root() && VERBOSE) {
-        printf("Input dimensions: %d x %d\n", calc.input_H, calc.input_W);
-        printf("Kernel dimensions: %d x %d\n", calc.kernel_H, calc.kernel_W);
-        printf("Stride: %d x %d\n", calc.stride_H, calc.stride_W);
-        printf("Output dimensions: %d x %d\n", calc.output_H, calc.output_W);
-    }
+    DEBUGF("Input dimensions: %d x %d\n", calc.input_H, calc.input_W);
+    DEBUGF("Kernel dimensions: %d x %d\n", calc.kernel_H, calc.kernel_W);
+    DEBUGF("Stride: %d x %d\n", calc.stride_H, calc.stride_W);
+    DEBUGF("Output dimensions: %d x %d\n", calc.output_H, calc.output_W);
+    DEBUGF("This program is execute under %d acceleration\n", accopt);
 
     // ===================================================================
     // PHASE 3: INPUT ACQUISITION
@@ -208,7 +207,8 @@ int main(int argc, char *argv[]) {
         mpi_broadcast_kernel(&kernel, calc.kernel_H, calc.kernel_W, active_comm);
         break;
     }
-    case EXEC_Calculate:
+    case EXEC_CalcToFile:
+    case EXEC_PrintToScreen:
     case EXEC_Verify: {
         // ====================================================================
         // READ MODE: Load from files
@@ -221,7 +221,7 @@ int main(int argc, char *argv[]) {
         );
 
         if (local_padded_input == NULL) {
-            fprintf(stderr, "Rank %d: Failed to read local padded input from file\n", RANK);
+            ERRORF("Rank %d: Failed to read local padded input from file\n", RANK);
             MPI_Comm_free(&active_comm);
             MPI_Finalize();
             exit(EXIT_FAILURE);
@@ -231,7 +231,7 @@ int main(int argc, char *argv[]) {
         if (is_root()) {
             read_matrix_from_file(param.kernel_filepath, &kernel, &calc.kernel_H, &calc.kernel_W);
             if (kernel == NULL) {
-                fprintf(stderr, "Error: Failed to read kernel from file %s\n", param.kernel_filepath);
+                ERRORF("Error: Failed to read kernel from file %s\n", param.kernel_filepath);
                 free_matrix(local_padded_input, padded_local_H);
                 MPI_Comm_free(&active_comm);
                 MPI_Finalize();
@@ -259,15 +259,19 @@ int main(int argc, char *argv[]) {
     switch (accopt) {
         case ACC_SERIAL:
             // Serial mode: single-threaded, no MPI, no OpenMP
-            conv2d_stride_serial(local_padded_input, padded_local_H, padded_local_W,
-                                kernel, calc.kernel_H, calc.kernel_W,
-                                calc.stride_H, calc.stride_W, local_output);
+            ROOT_DO(
+                conv2d_stride_serial(local_padded_input, padded_local_H, padded_local_W,
+                                    kernel, calc.kernel_H, calc.kernel_W,
+                                    calc.stride_H, calc.stride_W, local_output);
+            )
             break;
         case ACC_OMP:
             // OpenMP-only mode: multi-threaded, no MPI
-            conv2d_stride_openmp(local_padded_input, padded_local_H, padded_local_W,
-                                kernel, calc.kernel_H, calc.kernel_W,
-                                calc.stride_H, calc.stride_W, local_output);
+            ROOT_DO(
+                conv2d_stride_openmp(local_padded_input, padded_local_H, padded_local_W,
+                                    kernel, calc.kernel_H, calc.kernel_W,
+                                    calc.stride_H, calc.stride_W, local_output);
+            )
             break;
         case ACC_MPI:
             // MPI-only mode: distributed memory, no OpenMP within each process
@@ -285,14 +289,11 @@ int main(int argc, char *argv[]) {
 
     // End timing
     mpi_timer_end(&timer);
-    if (is_root()) {
-        if (param.time_execution_seconds) {
-            printf("Timing - Convolution with stride: %.6f seconds\n", timer.elapsed_time);
-        } else if (param.time_execution) {
-            printf("Timing - Convolution with stride: %.3f milliseconds\n",
-                    timer.elapsed_time * 1000.0);
-        }
-        fflush(stdout);
+    if (param.time_execution_seconds) {
+        DEBUGF("Timing - Convolution with stride: %.6f seconds\n", timer.elapsed_time);
+    } else if (param.time_execution) {
+        DEBUGF("Timing - Convolution with stride: %.3f milliseconds\n",
+                timer.elapsed_time * 1000.0);
     }
 
     // ===================================================================
@@ -303,7 +304,7 @@ int main(int argc, char *argv[]) {
 
     if (SIZE == 1) {
         full_output = local_output;
-    } else if (execopt == EXEC_Verify || execopt == EXEC_GenerateOnly) {
+    } else if (execopt == EXEC_Verify || execopt == EXEC_GenerateOnly || execopt == EXEC_PrintToScreen) {
         // Calculate output start row for gathering
         int output_start_row;
         int output_base_rows = calc.output_H / SIZE;
@@ -349,7 +350,7 @@ int main(int argc, char *argv[]) {
                 printf("Error reading expected output file for verification\n");
             }
         }
-    } else if (execopt == EXEC_GenerateSave || execopt == EXEC_Calculate) {
+    } else if (execopt == EXEC_GenerateSave || execopt == EXEC_CalcToFile) {
         // Write output to file
         int output_start_row;
         int output_base_rows = calc.output_H / SIZE;
@@ -375,16 +376,16 @@ int main(int argc, char *argv[]) {
             active_comm
         );
 
-        if (write_result != 0 && is_root()) {
-            fprintf(stderr, "Error: Failed to write output file\n");
+        if (write_result != 0) {
+            ERRORF("Error: Failed to write output file\n");
         }
-    } else if (is_root() && VERBOSE && full_output != NULL) {
+    } else ROOT_DO(
         if (calc.output_H <= 10 && calc.output_W <= 10) {
             print_matrix(full_output, calc.output_H, calc.output_W);
         } else {
             printf("Result computed (%dx%d)\n", calc.output_H, calc.output_W);
         }
-    }
+    )
 
     // Cleanup
     if (full_output != NULL && full_output != local_output && is_root()) {

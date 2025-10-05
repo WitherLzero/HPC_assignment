@@ -166,13 +166,6 @@ void conv2d_stride_serial(float **restrict f, int H, int W, float **restrict g, 
 
 void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, int kH, int kW,
                           int sH, int sW, float **restrict output) {
-    #pragma omp parallel
-    {
-        #pragma omp single
-        {
-            printf("OpenMP General: Using %d threads\n", omp_get_num_threads());
-        }
-    }
 
     int original_H = H - kH + 1;
     int original_W = W - kW + 1;

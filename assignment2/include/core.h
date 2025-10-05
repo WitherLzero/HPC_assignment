@@ -11,9 +11,11 @@ enum ExecOpt {
     // When all params are specified
     EXEC_GenerateSave,
     // When inputs files but matrix size is specified
-    EXEC_Calculate,
+    EXEC_PrintToScreen,
     // When all files but matrix size are specified
-    EXEC_Verify
+    EXEC_Verify,
+    // When output file don't exist
+    EXEC_CalcToFile // TODO
     // Rest of the situations are UB
 };
 
