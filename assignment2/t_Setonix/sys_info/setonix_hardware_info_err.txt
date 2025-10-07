@@ -1,0 +1,12 @@
+
+Currently Loaded Modules:
+  1) craype-x86-milan                  8) pawseytools
+  2) libfabric/1.22.0                  9) gcc-native/14.2
+  3) craype-network-ofi               10) craype/2.7.34
+  4) perftools-base/25.03.0           11) cray-dsmml/0.3.1
+  5) xpmem/0.2.119-1.3_gef379be13330  12) cray-mpich/8.1.32
+  6) pawseyenv/2025.08                13) cray-libsci/25.03.0
+  7) pawsey                           14) PrgEnv-gnu/8.6.0
+
+ 
+

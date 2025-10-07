@@ -220,8 +220,10 @@ int init_params(
 
     ROOT_DO(
         output_file_exist = (access(output_file, F_OK) == 0);
-        MPI_Bcast(&output_file_exist, 1, MPI_INT, 0, MPI_COMM_WORLD);
     );
+
+    // All processes must participate in broadcast
+    MPI_Bcast(&output_file_exist, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (!has_generation && !has_input_files) {
         perror("No inputs");

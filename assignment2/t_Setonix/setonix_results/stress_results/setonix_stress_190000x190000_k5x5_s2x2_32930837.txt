@@ -1,0 +1,69 @@
+============================================
+STRESS TEST RESULTS - Setonix
+============================================
+Job ID: 32930837
+Date: Wed Oct  8 02:11:54 AM AWST 2025
+
+Configuration:
+  Matrix: 190000x190000
+  Kernel: 5x5
+  Stride: 2x2
+  Nodes: 2
+  MPI Processes: 16
+  OpenMP Threads: 16
+  Total cores: 256
+
+Results:
+  Status: SUCCESS
+  Wall clock time: 625 seconds (10.41 minutes)
+  Convolution time: 1.630670 seconds
+  Gather time: 278.233058 seconds
+  Total parallel time: 279.863727 seconds
+  Peak Memory: 183635 MB (179.33 GB)
+  Start time: Wed Oct  8 02:01:23 AM AWST 2025
+  End time: Wed Oct  8 02:11:48 AM AWST 2025
+
+============================================
+FULL OUTPUT
+============================================
+[32m[INFO] [0mTiming - Convolution: 1.630670 seconds
+[32m[INFO] [0mTiming - Gather: 278.233058 seconds
+[32m[INFO] [0mTiming - Total: 279.863727 seconds
+[32m[INFO] [0mResult computed (95000x95000)
+
+src/conv2d_mpi.c: In function ‘calculate_local_dimensions’:
+src/conv2d_mpi.c:55:9: warning: unused variable ‘output_W’ [-Wunused-variable]
+   55 |     int output_W = W_global;
+      |         ^~~~~~~~
+src/conv2d_mpi.c: In function ‘calculate_local_dimensions_stride_aware’:
+src/conv2d_mpi.c:81:17: warning: unused parameter ‘sW’ [-Wunused-parameter]
+   81 |     int sH, int sW,
+      |             ~~~~^~
+src/conv2d_mpi.c: In function ‘mpi_distribute_matrix_stride_aware’:
+src/conv2d_mpi.c:446:59: warning: unused parameter ‘kernel_W’ [-Wunused-parameter]
+  446 |                                         int kernel_H, int kernel_W, int stride_H, int stride_W,
+      |                                                       ~~~~^~~~~~~~
+src/conv2d_mpi.c:446:87: warning: unused parameter ‘stride_W’ [-Wunused-parameter]
+  446 |                                         int kernel_H, int kernel_W, int stride_H, int stride_W,
+      |                                                                                   ~~~~^~~~~~~~
+src/io_mpi.c: In function ‘write_padded_matrix_to_file’:
+src/io_mpi.c:82:9: warning: unused parameter ‘padded_H’ [-Wunused-parameter]
+   82 |     int padded_H, int padded_W,
+      |     ~~~~^~~~~~~~
+src/io_mpi.c:82:23: warning: unused parameter ‘padded_W’ [-Wunused-parameter]
+   82 |     int padded_H, int padded_W,
+      |                   ~~~~^~~~~~~~
+src/io_mpi.c: In function ‘mpi_generate_local_padded_matrix’:
+src/io_mpi.c:127:9: warning: unused parameter ‘sH’ [-Wunused-parameter]
+  127 |     int sH, int sW,
+      |     ~~~~^~
+src/io_mpi.c:127:17: warning: unused parameter ‘sW’ [-Wunused-parameter]
+  127 |     int sH, int sW,
+      |             ~~~~^~
+src/io_mpi.c: In function ‘mpi_write_output_parallel’:
+src/io_mpi.c:435:9: warning: unused parameter ‘kH’ [-Wunused-parameter]
+  435 |     int kH,
+      |     ~~~~^~
+src/io_mpi.c:436:9: warning: unused parameter ‘kW’ [-Wunused-parameter]
+  436 |     int kW,
+      |     ~~~~^~

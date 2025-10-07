@@ -289,20 +289,16 @@ int main(int argc, char *argv[]) {
             break;
     }
 
-    // End timing
+    // End convolution timing (before gather)
     mpi_timer_end(&timer);
-    if (param.time_execution_seconds) {
-        INFOF("Timing - Convolution with stride: %.6f seconds", timer.elapsed_time);
-    } else if (param.time_execution) {
-        INFOF("Timing - Convolution with stride: %.3f milliseconds",
-                timer.elapsed_time * 1000.0);
-    }
 
     // ===================================================================
     // PHASE 5: OUTPUT HANDLING
     // ===================================================================
 
     float **full_output = NULL;
+    mpi_timer_t gather_timer;
+    mpi_timer_start(&gather_timer);
 
     if (SIZE == 1) {
         full_output = local_output;
@@ -326,6 +322,24 @@ int main(int argc, char *argv[]) {
                           output_start_row,
                           &full_output, calc.output_H, calc.output_W,
                           active_comm);
+    }
+
+    // End gather timing
+    mpi_timer_end(&gather_timer);
+
+    // Report timing breakdown
+    if (param.time_execution_seconds) {
+        INFOF("Timing - Convolution: %.6f seconds", timer.elapsed_time);
+        if (SIZE > 1 && (execopt == EXEC_Verify || execopt == EXEC_GenerateOnly || execopt == EXEC_PrintToScreen)) {
+            INFOF("Timing - Gather: %.6f seconds", gather_timer.elapsed_time);
+            INFOF("Timing - Total: %.6f seconds", timer.elapsed_time + gather_timer.elapsed_time);
+        }
+    } else if (param.time_execution) {
+        INFOF("Timing - Convolution: %.3f milliseconds", timer.elapsed_time * 1000.0);
+        if (SIZE > 1 && (execopt == EXEC_Verify || execopt == EXEC_GenerateOnly || execopt == EXEC_PrintToScreen)) {
+            INFOF("Timing - Gather: %.3f milliseconds", gather_timer.elapsed_time * 1000.0);
+            INFOF("Timing - Total: %.3f milliseconds", (timer.elapsed_time + gather_timer.elapsed_time) * 1000.0);
+        }
     }
 
     // Verification mode
