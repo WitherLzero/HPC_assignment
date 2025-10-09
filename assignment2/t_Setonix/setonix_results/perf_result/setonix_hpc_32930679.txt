@@ -1,12 +1,12 @@
 ============================================
 Setonix HPC Performance Testing - Assignment 2
-Job ID: 32930679
+Job ID: 33003632
 Nodes: 2 × AMD EPYC 7763
-Node list: nid[001660,001744]
+Node list: nid[001561,001675]
 MPI tasks: 16
 CPUs per task: 16
 Total cores: 256
-Start time: Wed Oct  8 01:53:59 AM AWST 2025
+Start time: Thu Oct  9 09:18:55 AM AWST 2025
 ============================================
 
 Loaded modules:
@@ -40,36 +40,40 @@ Fixed problem: 50000×50000, kernel 3×3
 ============================================
 
 [Strong 1.1] Hybrid - 16 proc × 16 threads = 256 cores
-[32m[INFO] [0mTiming - Convolution: 202.516 milliseconds
-[32m[INFO] [0mTiming - Gather: 8532.311 milliseconds
-[32m[INFO] [0mTiming - Total: 8734.827 milliseconds
+[32m[INFO] [0mTiming - Convolution: 179.664 milliseconds
+[32m[INFO] [0mTiming - Gather: 8591.867 milliseconds
+[32m[INFO] [0mTiming - Total: 8771.531 milliseconds
 [32m[INFO] [0mResult computed (50000x50000)
 
 [Strong 1.2] Hybrid - 16 proc × 8 threads = 128 cores
-[32m[INFO] [0mTiming - Convolution: 96.603 milliseconds
-[32m[INFO] [0mTiming - Gather: 8507.249 milliseconds
-[32m[INFO] [0mTiming - Total: 8603.852 milliseconds
+[32m[INFO] [0mTiming - Convolution: 96.555 milliseconds
+[32m[INFO] [0mTiming - Gather: 8667.825 milliseconds
+[32m[INFO] [0mTiming - Total: 8764.380 milliseconds
 [32m[INFO] [0mResult computed (50000x50000)
 
 [Strong 1.3] Hybrid - 16 proc × 4 threads = 64 cores
-[32m[INFO] [0mTiming - Convolution: 189.278 milliseconds
-[32m[INFO] [0mTiming - Gather: 8522.317 milliseconds
-[32m[INFO] [0mTiming - Total: 8711.596 milliseconds
+[32m[INFO] [0mTiming - Convolution: 188.934 milliseconds
+[32m[INFO] [0mTiming - Gather: 8579.978 milliseconds
+[32m[INFO] [0mTiming - Total: 8768.913 milliseconds
 [32m[INFO] [0mResult computed (50000x50000)
 
 [Strong 1.4] Hybrid - 8 proc × 16 threads = 128 cores
-[32m[INFO] [0mTiming - Convolution: 98.939 milliseconds
-[32m[INFO] [0mTiming - Gather: 8014.937 milliseconds
-[32m[INFO] [0mTiming - Total: 8113.876 milliseconds
+[32m[INFO] [0mTiming - Convolution: 97.087 milliseconds
+[32m[INFO] [0mTiming - Gather: 8045.705 milliseconds
+[32m[INFO] [0mTiming - Total: 8142.792 milliseconds
 [32m[INFO] [0mResult computed (50000x50000)
 
 [Strong 1.5] Hybrid - 8 proc × 8 threads = 64 cores
-[32m[INFO] [0mTiming - Convolution: 190.512 milliseconds
-[32m[INFO] [0mTiming - Gather: 8094.985 milliseconds
-[32m[INFO] [0mTiming - Total: 8285.497 milliseconds
+[32m[INFO] [0mTiming - Convolution: 189.856 milliseconds
+[32m[INFO] [0mTiming - Gather: 8216.725 milliseconds
+[32m[INFO] [0mTiming - Total: 8406.581 milliseconds
 [32m[INFO] [0mResult computed (50000x50000)
 
 [Strong 1.6] Hybrid - 8 proc × 4 threads = 32 cores
+[32m[INFO] [0mTiming - Convolution: 261.478 milliseconds
+[32m[INFO] [0mTiming - Gather: 8033.413 milliseconds
+[32m[INFO] [0mTiming - Total: 8294.890 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
 
 ============================================
 SECTION 2: WEAK SCALING
@@ -77,21 +81,21 @@ Proportional matrix size × core count
 ============================================
 
 [Weak 2.1] 64 cores: 50000×50000 matrix (4 proc × 16 threads)
-[32m[INFO] [0mTiming - Convolution: 193.305 milliseconds
-[32m[INFO] [0mTiming - Gather: 7041.823 milliseconds
-[32m[INFO] [0mTiming - Total: 7235.129 milliseconds
+[32m[INFO] [0mTiming - Convolution: 194.801 milliseconds
+[32m[INFO] [0mTiming - Gather: 7065.091 milliseconds
+[32m[INFO] [0mTiming - Total: 7259.893 milliseconds
 [32m[INFO] [0mResult computed (50000x50000)
 
 [Weak 2.2] 128 cores: 70711×70711 matrix (8 proc × 16 threads)
-[32m[INFO] [0mTiming - Convolution: 196.342 milliseconds
-[32m[INFO] [0mTiming - Gather: 15613.199 milliseconds
-[32m[INFO] [0mTiming - Total: 15809.541 milliseconds
+[32m[INFO] [0mTiming - Convolution: 195.248 milliseconds
+[32m[INFO] [0mTiming - Gather: 15647.396 milliseconds
+[32m[INFO] [0mTiming - Total: 15842.644 milliseconds
 [32m[INFO] [0mResult computed (70711x70711)
 
 [Weak 2.3] 256 cores: 100000×100000 matrix (16 proc × 16 threads)
-[32m[INFO] [0mTiming - Convolution: 199.820 milliseconds
-[32m[INFO] [0mTiming - Gather: 33247.671 milliseconds
-[32m[INFO] [0mTiming - Total: 33447.491 milliseconds
+[32m[INFO] [0mTiming - Convolution: 198.612 milliseconds
+[32m[INFO] [0mTiming - Gather: 33576.845 milliseconds
+[32m[INFO] [0mTiming - Total: 33775.457 milliseconds
 [32m[INFO] [0mResult computed (100000x100000)
 
 ============================================
@@ -100,21 +104,21 @@ Matrix: 80000×80000, kernel 3×3
 ============================================
 
 [Stride 3.1] Stride 1×1 (16 proc × 16 threads = 256 cores)
-[32m[INFO] [0mTiming - Convolution: 170.176 milliseconds
-[32m[INFO] [0mTiming - Gather: 21032.993 milliseconds
-[32m[INFO] [0mTiming - Total: 21203.169 milliseconds
+[32m[INFO] [0mTiming - Convolution: 127.020 milliseconds
+[32m[INFO] [0mTiming - Gather: 21175.607 milliseconds
+[32m[INFO] [0mTiming - Total: 21302.627 milliseconds
 [32m[INFO] [0mResult computed (80000x80000)
 
 [Stride 3.2] Stride 2×2 (16 proc × 16 threads = 256 cores)
-[32m[INFO] [0mTiming - Convolution: 60.607 milliseconds
-[32m[INFO] [0mTiming - Gather: 8900.096 milliseconds
-[32m[INFO] [0mTiming - Total: 8960.703 milliseconds
+[32m[INFO] [0mTiming - Convolution: 60.763 milliseconds
+[32m[INFO] [0mTiming - Gather: 8934.722 milliseconds
+[32m[INFO] [0mTiming - Total: 8995.485 milliseconds
 [32m[INFO] [0mResult computed (40000x40000)
 
 [Stride 3.3] Stride 3×3 (16 proc × 16 threads = 256 cores)
-[32m[INFO] [0mTiming - Convolution: 49.877 milliseconds
-[32m[INFO] [0mTiming - Gather: 2518.757 milliseconds
-[32m[INFO] [0mTiming - Total: 2568.634 milliseconds
+[32m[INFO] [0mTiming - Convolution: 49.688 milliseconds
+[32m[INFO] [0mTiming - Gather: 2493.931 milliseconds
+[32m[INFO] [0mTiming - Total: 2543.619 milliseconds
 [32m[INFO] [0mResult computed (26667x26667)
 
 ============================================
@@ -123,21 +127,21 @@ Matrix: 80000×80000, stride 1×1
 ============================================
 
 [Kernel 4.1] 3×3 kernel (16 proc × 16 threads = 256 cores)
-[32m[INFO] [0mTiming - Convolution: 181.376 milliseconds
-[32m[INFO] [0mTiming - Gather: 21162.724 milliseconds
-[32m[INFO] [0mTiming - Total: 21344.100 milliseconds
+[32m[INFO] [0mTiming - Convolution: 181.288 milliseconds
+[32m[INFO] [0mTiming - Gather: 21443.803 milliseconds
+[32m[INFO] [0mTiming - Total: 21625.092 milliseconds
 [32m[INFO] [0mResult computed (80000x80000)
 
 [Kernel 4.2] 5×5 kernel (16 proc × 16 threads = 256 cores)
-[32m[INFO] [0mTiming - Convolution: 202.701 milliseconds
-[32m[INFO] [0mTiming - Gather: 21116.370 milliseconds
-[32m[INFO] [0mTiming - Total: 21319.072 milliseconds
+[32m[INFO] [0mTiming - Convolution: 200.184 milliseconds
+[32m[INFO] [0mTiming - Gather: 21205.340 milliseconds
+[32m[INFO] [0mTiming - Total: 21405.525 milliseconds
 [32m[INFO] [0mResult computed (80000x80000)
 
 [Kernel 4.3] 7×7 kernel (16 proc × 16 threads = 256 cores)
-[32m[INFO] [0mTiming - Convolution: 1589.726 milliseconds
-[32m[INFO] [0mTiming - Gather: 21059.268 milliseconds
-[32m[INFO] [0mTiming - Total: 22648.994 milliseconds
+[32m[INFO] [0mTiming - Convolution: 1571.224 milliseconds
+[32m[INFO] [0mTiming - Gather: 21207.641 milliseconds
+[32m[INFO] [0mTiming - Total: 22778.864 milliseconds
 [32m[INFO] [0mResult computed (80000x80000)
 
 ============================================
@@ -146,19 +150,19 @@ Matrix: 100000×100000, kernel 3×3
 ============================================
 
 [Node 5.1] Single node: 8 proc × 16 threads = 128 cores
-[32m[INFO] [0mTiming - Convolution: 390.199 milliseconds
-[32m[INFO] [0mTiming - Gather: 31358.346 milliseconds
-[32m[INFO] [0mTiming - Total: 31748.545 milliseconds
+[32m[INFO] [0mTiming - Convolution: 388.668 milliseconds
+[32m[INFO] [0mTiming - Gather: 31527.487 milliseconds
+[32m[INFO] [0mTiming - Total: 31916.156 milliseconds
 [32m[INFO] [0mResult computed (100000x100000)
 
 [Node 5.2] 2 nodes: 16 proc × 16 threads = 256 cores
-[32m[INFO] [0mTiming - Convolution: 199.950 milliseconds
-[32m[INFO] [0mTiming - Gather: 33369.777 milliseconds
-[32m[INFO] [0mTiming - Total: 33569.727 milliseconds
+[32m[INFO] [0mTiming - Convolution: 198.832 milliseconds
+[32m[INFO] [0mTiming - Gather: 33417.049 milliseconds
+[32m[INFO] [0mTiming - Total: 33615.881 milliseconds
 [32m[INFO] [0mResult computed (100000x100000)
 
 ============================================
 SETONIX PERFORMANCE TESTING COMPLETED
-Job ID: 32930679
-End time: Wed Oct  8 02:00:47 AM AWST 2025
+Job ID: 33003632
+End time: Thu Oct  9 09:25:45 AM AWST 2025
 ============================================
