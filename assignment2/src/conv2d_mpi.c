@@ -203,8 +203,8 @@ void conv2d_stride_openmp(float **restrict f, int H, int W, float **restrict g, 
                 int start_col = j * sW;
 
                 if (start_row + kH <= H && start_col + kW <= W) {
+                    #pragma omp simd reduction(+:sum)
                     for (int ki = 0; ki < kH; ki++) {
-                        #pragma omp simd reduction(+:sum)
                         for (int kj = 0; kj < kW; kj++) {
                             sum += f[start_row + ki][start_col + kj] * g[ki][kj];
                         }
