@@ -1,0 +1,95 @@
+============================================
+STRESS TEST RESULTS
+============================================
+Job ID: 43085
+Date: Thu 09 Oct 2025 10:59:22 AWST
+
+Configuration:
+  Matrix: 240000x240000
+  Kernel: 3x3
+  Stride: 1x1
+  Nodes: 2
+  MPI Processes: 12
+  OpenMP Threads per process: 8
+  Total cores: 96
+
+Results:
+  Status: SUCCESS
+  Wall clock time: 349 seconds (5.81 minutes)
+  Convolution time: Convolution: seconds
+  Gather time: Gather: seconds
+  Total parallel time: Total: seconds
+  Peak Memory: 257106 MB (251.08 GB)
+  Start time: Thu 09 Oct 2025 10:53:33 AWST
+  End time: Thu 09 Oct 2025 10:59:22 AWST
+
+============================================
+FULL OUTPUT
+============================================
+[32m[INFO] [0mTiming - Convolution: 12.156780 seconds
+[32m[INFO] [0mTiming - Gather: 304.841611 seconds
+[32m[INFO] [0mTiming - Total: 316.998390 seconds
+[32m[INFO] [0mResult computed (240000x240000)
+	Command being timed: "mpirun -np 12 ./build/conv_stride_test -H 240000 -W 240000 -kH 3 -kW 3 -sH 1 -sW 1 -m -T"
+	User time (seconds): 210.55
+	System time (seconds): 124.44
+	Percent of CPU this job got: 95%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 5:49.22
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 263276952
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 79140360
+	Voluntary context switches: 3244936
+	Involuntary context switches: 9158
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+============================================
+SLURM ERROR OUTPUT
+============================================
+src/conv2d_mpi.c: In function ‘calculate_local_dimensions’:
+src/conv2d_mpi.c:55:9: warning: unused variable ‘output_W’ [-Wunused-variable]
+   55 |     int output_W = W_global;
+      |         ^~~~~~~~
+src/conv2d_mpi.c: In function ‘calculate_local_dimensions_stride_aware’:
+src/conv2d_mpi.c:81:17: warning: unused parameter ‘sW’ [-Wunused-parameter]
+   81 |     int sH, int sW,
+      |             ~~~~^~
+src/conv2d_mpi.c: In function ‘mpi_distribute_matrix_stride_aware’:
+src/conv2d_mpi.c:446:59: warning: unused parameter ‘kernel_W’ [-Wunused-parameter]
+  446 |                                         int kernel_H, int kernel_W, int stride_H, int stride_W,
+      |                                                       ~~~~^~~~~~~~
+src/conv2d_mpi.c:446:87: warning: unused parameter ‘stride_W’ [-Wunused-parameter]
+  446 |                                         int kernel_H, int kernel_W, int stride_H, int stride_W,
+      |                                                                                   ~~~~^~~~~~~~
+src/io_mpi.c: In function ‘write_padded_matrix_to_file’:
+src/io_mpi.c:82:9: warning: unused parameter ‘padded_H’ [-Wunused-parameter]
+   82 |     int padded_H, int padded_W,
+      |     ~~~~^~~~~~~~
+src/io_mpi.c:82:23: warning: unused parameter ‘padded_W’ [-Wunused-parameter]
+   82 |     int padded_H, int padded_W,
+      |                   ~~~~^~~~~~~~
+src/io_mpi.c: In function ‘mpi_generate_local_padded_matrix’:
+src/io_mpi.c:127:9: warning: unused parameter ‘sH’ [-Wunused-parameter]
+  127 |     int sH, int sW,
+      |     ~~~~^~
+src/io_mpi.c:127:17: warning: unused parameter ‘sW’ [-Wunused-parameter]
+  127 |     int sH, int sW,
+      |             ~~~~^~
+src/io_mpi.c: In function ‘mpi_write_output_parallel’:
+src/io_mpi.c:435:9: warning: unused parameter ‘kH’ [-Wunused-parameter]
+  435 |     int kH,
+      |     ~~~~^~
+src/io_mpi.c:436:9: warning: unused parameter ‘kW’ [-Wunused-parameter]
+  436 |     int kW,
+      |     ~~~~^~

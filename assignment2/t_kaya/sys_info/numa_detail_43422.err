@@ -1,0 +1,2 @@
+head: cannot open '/proc/slabinfo' for reading: Permission denied
+grep: /proc/slabinfo: Permission denied
