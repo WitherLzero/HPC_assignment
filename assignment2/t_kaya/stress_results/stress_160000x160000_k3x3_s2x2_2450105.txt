@@ -1,0 +1,33 @@
+============================================
+STRESS TEST RESULTS
+============================================
+Job ID: 2450105
+Date: Fri Oct 10 07:05:18 PM AWST 2025
+
+Configuration:
+  Matrix: 160000x160000
+  Kernel: 3x3
+  Stride: 2x2
+  Nodes: 2
+  MPI Processes: 12
+  OpenMP Threads per process: 8
+  Total cores: 96
+
+Results:
+  Status: SUCCESS
+  Wall clock time: 683 seconds (11.38 minutes)
+  Convolution time: 6.800 seconds
+  Gather time: 394.127 seconds
+  Total parallel time: 400.927 seconds
+  Peak Memory: 148480 MB (145.00 GB)
+  Start time: Fri Oct 10 07:05:18 PM AWST 2025
+  End time: Fri Oct 10 07:16:41 PM AWST 2025
+
+============================================
+FULL OUTPUT
+============================================
+[32m[INFO] [0mTiming - Convolution: 6.800 seconds
+[32m[INFO] [0mTiming - Gather: 394.127 seconds
+[32m[INFO] [0mTiming - Total: 400.927 seconds
+[32m[INFO] [0mResult computed (80000x80000)
+

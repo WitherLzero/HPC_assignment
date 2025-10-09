@@ -1,0 +1,35 @@
+============================================
+STRESS TEST RESULTS
+============================================
+Job ID: 2450103
+Date: Fri Oct 10 05:04:15 PM AWST 2025
+
+Configuration:
+  Matrix: 260000x260000
+  Kernel: 3x3
+  Stride: 1x1
+  Nodes: 2
+  MPI Processes: 12
+  OpenMP Threads per process: 8
+  Total cores: 96
+
+Results:
+  Status: FAILED
+  Wall clock time: 900 seconds (15.00 minutes)
+  Convolution time: 343.817 seconds
+  Gather time: N/A (job killed during gather after ~506 seconds)
+  Total parallel time: N/A
+  Peak Memory: 346112 MB (338.00 GB)
+  Start time: Fri Oct 10 05:04:15 PM AWST 2025
+  End time: Fri Oct 10 05:19:15 PM AWST 2025
+
+============================================
+FULL OUTPUT
+============================================
+[32m[INFO] [0mTiming - Convolution: 343.817 seconds
+slurmstepd: error: *** JOB 2450103 ON kaya001 CANCELLED AT 2025-10-10T17:19:15 DUE TO TIME LIMIT ***
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+srun: error: kaya001: task 0: Killed
+srun: error: kaya001: tasks 1-5: Killed
+srun: error: kaya002: tasks 6-11: Killed
+
