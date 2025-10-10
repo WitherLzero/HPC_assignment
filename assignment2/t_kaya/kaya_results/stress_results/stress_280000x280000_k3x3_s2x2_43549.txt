@@ -1,3 +1,62 @@
+============================================
+STRESS TEST RESULTS
+============================================
+Job ID: 43549
+Date: Fri 10 Oct 2025 17:04:15 AWST
+
+Configuration:
+  Matrix: 280000x280000
+  Kernel: 3x3
+  Stride: 2x2
+  Nodes: 2
+  MPI Processes: 24
+  OpenMP Threads per process: 4
+  Total cores: 96
+
+Results:
+  Status: SUCCESS
+  Wall clock time: 494 seconds (8.23 minutes)
+  Convolution time: 2.317700 seconds
+  Gather time: 99.751121 seconds
+  Total parallel time: 102.068820 seconds
+  Peak Memory: 390289 MB (381.14 GB)
+  Start time: Fri 10 Oct 2025 16:56:01 AWST
+  End time: Fri 10 Oct 2025 17:04:15 AWST
+
+============================================
+FULL OUTPUT
+============================================
+[32m[INFO] [0mTiming - Convolution: 2.317700 seconds
+[32m[INFO] [0mTiming - Gather: 99.751121 seconds
+[32m[INFO] [0mTiming - Total: 102.068820 seconds
+[32m[INFO] [0mResult computed (140000x140000)
+	Command being timed: "mpirun -np 24 ./build/conv_stride_test -H 280000 -W 280000 -kH 3 -kW 3 -sH 2 -sW 2 -m -T"
+	User time (seconds): 4027.35
+	System time (seconds): 299.51
+	Percent of CPU this job got: 876%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 8:13.81
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 399656284
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 222989070
+	Voluntary context switches: 7823686
+	Involuntary context switches: 24781
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+============================================
+SLURM ERROR OUTPUT
+============================================
 src/conv2d_mpi.c: In function ‘calculate_local_dimensions’:
 src/conv2d_mpi.c:55:9: warning: unused variable ‘output_W’ [-Wunused-variable]
    55 |     int output_W = W_global;
@@ -34,4 +93,3 @@ src/io_mpi.c:435:9: warning: unused parameter ‘kH’ [-Wunused-parameter]
 src/io_mpi.c:436:9: warning: unused parameter ‘kW’ [-Wunused-parameter]
   436 |     int kW,
       |     ~~~~^~
-slurmstepd: error: *** JOB 42679 ON k008 CANCELLED AT 2025-10-09T08:58:41 DUE TO TIME LIMIT ***

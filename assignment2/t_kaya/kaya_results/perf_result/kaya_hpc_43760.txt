@@ -1,0 +1,161 @@
+============================================
+HPC Performance Testing - Assignment 2
+Job ID: 43760
+Nodes: 2 (2 nodes × 48 cores/node)
+Available: 192 cores total (24 tasks × 8 threads/task)
+Start time: Fri 10 Oct 2025 19:23:30 AWST
+============================================
+
+Building project...
+rm -rf build build/conv_stride_test
+mkdir -p build
+mpicc -Wall -Wextra -std=c11 -O3 -fopenmp -Iinclude -c src/main.c -o build/main.o
+mpicc -Wall -Wextra -std=c11 -O3 -fopenmp -Iinclude -c src/conv2d_mpi.c -o build/conv2d_mpi.o
+mpicc -Wall -Wextra -std=c11 -O3 -fopenmp -Iinclude -c src/io_mpi.c -o build/io_mpi.o
+mpicc -Wall -Wextra -std=c11 -O3 -fopenmp -Iinclude -c src/core.c -o build/core.o
+mpicc -Wall -Wextra -std=c11 -O3 -fopenmp -Iinclude build/main.o build/conv2d_mpi.o build/io_mpi.o build/core.o -lm -o build/conv_stride_test
+Build completed.
+
+============================================
+SECTION 1: STRONG SCALING
+Fixed problem: 50000×50000, kernel 3×3
+Scaling from 48 cores (1 node) to 192 cores (2 nodes)
+============================================
+
+[Strong 1.1] 48 cores: 6 proc × 8 threads (single node)
+[32m[INFO] [0mTiming - Convolution: 969.334 milliseconds
+[32m[INFO] [0mTiming - Gather: 6231.342 milliseconds
+[32m[INFO] [0mTiming - Total: 7200.676 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+[Strong 1.2] 96 cores: 12 proc × 8 threads (2 nodes)
+[32m[INFO] [0mTiming - Convolution: 490.184 milliseconds
+[32m[INFO] [0mTiming - Gather: 6780.189 milliseconds
+[32m[INFO] [0mTiming - Total: 7270.373 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+[Strong 1.3] 144 cores: 18 proc × 8 threads (2 nodes)
+[32m[INFO] [0mTiming - Convolution: 336.848 milliseconds
+[32m[INFO] [0mTiming - Gather: 6245.573 milliseconds
+[32m[INFO] [0mTiming - Total: 6582.421 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+[Strong 1.4] 192 cores: 24 proc × 8 threads (2 nodes)
+[32m[INFO] [0mTiming - Convolution: 261.862 milliseconds
+[32m[INFO] [0mTiming - Gather: 5769.053 milliseconds
+[32m[INFO] [0mTiming - Total: 6030.915 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+[Strong 1.5] 96 cores: 24 proc × 4 threads (2 nodes)
+[32m[INFO] [0mTiming - Convolution: 247.442 milliseconds
+[32m[INFO] [0mTiming - Gather: 5752.553 milliseconds
+[32m[INFO] [0mTiming - Total: 5999.995 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+[Strong 1.6] 48 cores: 24 proc × 2 threads (2 nodes)
+[32m[INFO] [0mTiming - Convolution: 249.480 milliseconds
+[32m[INFO] [0mTiming - Gather: 5734.231 milliseconds
+[32m[INFO] [0mTiming - Total: 5983.711 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+============================================
+SECTION 2: WEAK SCALING
+Proportional matrix size × core count
+Base: ~5e9 ops per core (50K×50K / 48 cores)
+============================================
+
+[Weak 2.1] 48 cores: 50000×50000 matrix (6 proc × 8 threads)
+[32m[INFO] [0mTiming - Convolution: 955.546 milliseconds
+[32m[INFO] [0mTiming - Gather: 6206.862 milliseconds
+[32m[INFO] [0mTiming - Total: 7162.408 milliseconds
+[32m[INFO] [0mResult computed (50000x50000)
+
+[Weak 2.2] 96 cores: 70711×70711 matrix (12 proc × 8 threads)
+[32m[INFO] [0mTiming - Convolution: 984.567 milliseconds
+[32m[INFO] [0mTiming - Gather: 9956.979 milliseconds
+[32m[INFO] [0mTiming - Total: 10941.547 milliseconds
+[32m[INFO] [0mResult computed (70711x70711)
+
+[Weak 2.3] 144 cores: 86603×86603 matrix (18 proc × 8 threads)
+[32m[INFO] [0mTiming - Convolution: 1011.450 milliseconds
+[32m[INFO] [0mTiming - Gather: 42255.774 milliseconds
+[32m[INFO] [0mTiming - Total: 43267.224 milliseconds
+[32m[INFO] [0mResult computed (86603x86603)
+
+[Weak 2.4] 192 cores: 100000×100000 matrix (24 proc × 8 threads)
+[32m[INFO] [0mTiming - Convolution: 1006.418 milliseconds
+[32m[INFO] [0mTiming - Gather: 49441.259 milliseconds
+[32m[INFO] [0mTiming - Total: 50447.677 milliseconds
+[32m[INFO] [0mResult computed (100000x100000)
+
+============================================
+SECTION 3: STRIDE IMPACT
+Matrix: 80000×80000, kernel 3×3
+Full 192 cores (24 proc × 8 threads)
+============================================
+
+[Stride 3.1] Stride 1×1 (24 proc × 8 threads = 192 cores)
+[32m[INFO] [0mTiming - Convolution: 641.423 milliseconds
+[32m[INFO] [0mTiming - Gather: 28329.374 milliseconds
+[32m[INFO] [0mTiming - Total: 28970.797 milliseconds
+[32m[INFO] [0mResult computed (80000x80000)
+
+[Stride 3.2] Stride 2×2 (24 proc × 8 threads = 192 cores)
+[32m[INFO] [0mTiming - Convolution: 434.370 milliseconds
+[32m[INFO] [0mTiming - Gather: 3753.797 milliseconds
+[32m[INFO] [0mTiming - Total: 4188.167 milliseconds
+[32m[INFO] [0mResult computed (40000x40000)
+
+[Stride 3.3] Stride 3×3 (24 proc × 8 threads = 192 cores)
+[32m[INFO] [0mTiming - Convolution: 323.132 milliseconds
+[32m[INFO] [0mTiming - Gather: 1644.324 milliseconds
+[32m[INFO] [0mTiming - Total: 1967.456 milliseconds
+[32m[INFO] [0mResult computed (26667x26667)
+
+============================================
+SECTION 4: KERNEL SIZE IMPACT
+Matrix: 80000×80000, stride 1×1
+Full 192 cores (24 proc × 8 threads)
+============================================
+
+[Kernel 4.1] 3×3 kernel (24 proc × 8 threads = 192 cores)
+[32m[INFO] [0mTiming - Convolution: 643.925 milliseconds
+[32m[INFO] [0mTiming - Gather: 33522.693 milliseconds
+[32m[INFO] [0mTiming - Total: 34166.618 milliseconds
+[32m[INFO] [0mResult computed (80000x80000)
+
+[Kernel 4.2] 5×5 kernel (24 proc × 8 threads = 192 cores)
+[32m[INFO] [0mTiming - Convolution: 1324.400 milliseconds
+[32m[INFO] [0mTiming - Gather: 27306.729 milliseconds
+[32m[INFO] [0mTiming - Total: 28631.128 milliseconds
+[32m[INFO] [0mResult computed (80000x80000)
+
+[Kernel 4.3] 7×7 kernel (24 proc × 8 threads = 192 cores)
+[32m[INFO] [0mTiming - Convolution: 4929.697 milliseconds
+[32m[INFO] [0mTiming - Gather: 30967.662 milliseconds
+[32m[INFO] [0mTiming - Total: 35897.360 milliseconds
+[32m[INFO] [0mResult computed (80000x80000)
+
+============================================
+SECTION 5: MULTI-NODE SCALING
+Matrix: 100000×100000, kernel 3×3
+Compare single-node vs 2-node performance
+============================================
+
+[Node 5.1] Single node, 96 cores: 12 proc × 8 threads
+[32m[INFO] [0mTiming - Convolution: 2056.722 milliseconds
+[32m[INFO] [0mTiming - Gather: 19077.082 milliseconds
+[32m[INFO] [0mTiming - Total: 21133.804 milliseconds
+[32m[INFO] [0mResult computed (100000x100000)
+
+[Node 5.2] 2 nodes, 192 cores: 24 proc × 8 threads
+[32m[INFO] [0mTiming - Convolution: 1035.222 milliseconds
+[32m[INFO] [0mTiming - Gather: 63620.655 milliseconds
+[32m[INFO] [0mTiming - Total: 64655.877 milliseconds
+[32m[INFO] [0mResult computed (100000x100000)
+
+============================================
+HPC PERFORMANCE TESTING COMPLETED
+Job ID: 43760
+End time: Fri 10 Oct 2025 19:32:57 AWST
+============================================

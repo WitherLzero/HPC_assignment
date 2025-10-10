@@ -238,6 +238,9 @@ echo ""
     echo "============================================"
     echo "$OUTPUT"
     echo ""
+    echo "============================================"
+    echo "SLURM ERROR OUTPUT"
+    echo "============================================"
 } > "$RESULT_FILE"
 
 # Append error output
