@@ -47,11 +47,11 @@ clean:
 test: $(TARGET)
 	@echo "Testing Assignment 2 with stride functionality..."
 	@echo "Test basic stride functionality:"
-	mpirun -np 1 ./$(TARGET) -f f/f1.txt -g g/g1.txt -sH 1 -sW 1 -t -v
+	mpirun -np 1 ./$(TARGET) -f f/f1.txt -g g/g1.txt -sH 3 -sW 2 -t -v
 	@echo "Test stride 2x2:"
-	mpirun -np 2 ./$(TARGET) -H 100 -W 100 -kH 3 -kW 3 -sH 2 -sW 2 -t
+	mpirun -np 2 ./$(TARGET) -H 100 -W 100 -kH 3 -kW 3 -sH 2 -sW 2 -t -m
 	@echo "Test stride 3x2:"
-	mpirun -np 2 ./$(TARGET) -H 200 -W 200 -kH 5 -kW 5 -sH 3 -sW 2 -t
+	mpirun -np 2 ./$(TARGET) -H 200 -W 200 -kH 5 -kW 5 -sH 3 -sW 2 -t -m
 
 # Performance comparison across different configurations
 compare: $(TARGET)
@@ -61,21 +61,21 @@ compare: $(TARGET)
 	@echo "Sequential (stride 2x2):"
 	mpirun -np 1 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t -s
 	@echo "MPI only (2 processes, stride 2x2):"
-	mpirun -np 2 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t -m
+	mpirun -np 2 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t -s -m
 	@echo "OpenMP only (stride 2x2):"
 	mpirun -np 1 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t
 	@echo "Hybrid MPI+OpenMP (2 processes, stride 2x2):"
-	mpirun -np 2 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t
+	mpirun -np 2 ./$(TARGET) -H 1000 -W 1000 -kH 3 -kW 3 -sH 2 -sW 2 -t -m
 
 # Stress test for HPC performance analysis
 stress: $(TARGET)
 	@echo "Stress testing large matrices with different stride values..."
 	@echo "Large matrix (4000x4000) stride 1x1:"
-	mpirun -np 4 ./$(TARGET) -H 4000 -W 4000 -kH 5 -kW 5 -sH 1 -sW 1 -t
+	mpirun -np 4 ./$(TARGET) -H 4000 -W 4000 -kH 5 -kW 5 -sH 1 -sW 1 -t -m
 	@echo "Large matrix (4000x4000) stride 2x2:"
-	mpirun -np 4 ./$(TARGET) -H 4000 -W 4000 -kH 5 -kW 5 -sH 2 -sW 2 -t
+	mpirun -np 4 ./$(TARGET) -H 4000 -W 4000 -kH 5 -kW 5 -sH 2 -sW 2 -t -m
 	@echo "Large matrix (4000x4000) stride 3x3:"
-	mpirun -np 4 ./$(TARGET) -H 4000 -W 4000 -kH 5 -kW 5 -sH 3 -sW 3 -t
+	mpirun -np 4 ./$(TARGET) -H 4000 -W 4000 -kH 5 -kW 5 -sH 3 -sW 3 -t -m
 
 # Install MPI dependencies (for systems that need it)
 install-deps:
